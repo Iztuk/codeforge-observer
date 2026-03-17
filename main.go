@@ -1,13 +1,12 @@
 package main
 
 import (
+	"codeforge-observer/proxy"
 	"context"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -22,75 +21,6 @@ const (
 	listenAddr = ":8080"
 	targetAddr = "http://localhost:8081"
 )
-
-type ProxyHandler struct {
-	TargetUrl *url.URL
-	Logger    *log.Logger
-	Proxy     *httputil.ReverseProxy
-}
-
-func NewProxyHandler(target string, logger *log.Logger) (*ProxyHandler, error) {
-	targetUrl, err := url.Parse(targetAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	rp := httputil.NewSingleHostReverseProxy(targetUrl)
-
-	h := &ProxyHandler{
-		TargetUrl: targetUrl,
-		Logger:    logger,
-		Proxy:     rp,
-	}
-
-	originalDirector := rp.Director
-	rp.Director = func(r *http.Request) {
-		originalDirector(r)
-		logger.Printf(
-			"proxy request url=%s method=%s path=%s remote=%s host=%s",
-			r.URL,
-			r.Method,
-			r.URL.Path,
-			r.RemoteAddr,
-			r.Host,
-		)
-	}
-
-	rp.ModifyResponse = func(r *http.Response) error {
-		h.Logger.Printf(
-			"proxy response method=%s path=%s status=%d",
-			r.Request.Method,
-			r.Request.URL.Path,
-			r.StatusCode,
-		)
-		return nil
-	}
-
-	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		h.Logger.Printf(
-			"proxy error method=%s path=%s err=%v",
-			r.Method,
-			r.URL.Path,
-			err,
-		)
-		http.Error(w, "bad gateway", http.StatusBadGateway)
-	}
-
-	return h, nil
-}
-
-func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-
-	h.Proxy.ServeHTTP(w, r)
-
-	h.Logger.Printf(
-		"request complete method=%s path=%s duration=%s",
-		r.Method,
-		r.URL.Path,
-		time.Since(start),
-	)
-}
 
 func main() {
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -114,14 +44,27 @@ func main() {
 
 	logger.Printf("daemon started with pid=%d", pid)
 
-	handler, err := NewProxyHandler(targetAddr, logger)
+	apiProxy, err := proxy.NewProxyHandler("http://localhost:8081", "api.local", logger)
 	if err != nil {
-		logger.Fatalf("failed to creat proxy handler: %v", err)
+		log.Fatal(err)
+	}
+
+	authProxy, err := proxy.NewProxyHandler("http://localhost:8082", "auth.local", logger)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pm := &proxy.ProxyManger{
+		Hosts: map[string]*proxy.ProxyTarget{
+			"api.local":  apiProxy,
+			"auth.local": authProxy,
+		},
+		Logger: logger,
 	}
 
 	server := &http.Server{
 		Addr:    listenAddr,
-		Handler: handler,
+		Handler: pm,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
