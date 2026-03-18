@@ -97,3 +97,40 @@ func TestAuditRequest_ValidPost(t *testing.T) {
 		t.Fatalf("expected no errors, got %v", errs)
 	}
 }
+
+func TestOpenApiPathPattern(t *testing.T) {
+	tests := []struct {
+		name     string
+		pattern  string
+		path     string
+		expected bool
+	}{
+		{
+			name:     "exact match returns true",
+			pattern:  "/api/accounts",
+			path:     "/api/accounts",
+			expected: true,
+		},
+		{
+			name:     "path parameter match returns true",
+			pattern:  "/api/accounts/{id}",
+			path:     "/api/accounts/01",
+			expected: true,
+		},
+		{
+			name:     "different base path returns false",
+			pattern:  "/api/accounts/{id}",
+			path:     "/api/account/01",
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := matchOpenApiPath(tc.pattern, tc.path)
+			if actual != tc.expected {
+				t.Errorf("matchOpenApiPath(%s, %s) = %t; expected %t", tc.pattern, tc.path, actual, tc.expected)
+			}
+		})
+	}
+}

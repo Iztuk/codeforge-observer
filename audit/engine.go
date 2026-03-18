@@ -6,17 +6,45 @@ import (
 	"strings"
 )
 
-// TODO: Get the request path and find it from API contracts
 func comparePath(path string, contractPaths map[string]OpenApiPathItem) (*OpenApiPathItem, error) {
-	val, ok := contractPaths[path]
-	if !ok {
-		return nil, fmt.Errorf("path %s not found in contract", path)
+	if val, ok := contractPaths[path]; ok {
+		return &val, nil
 	}
 
-	return &val, nil
+	for pattern, val := range contractPaths {
+		if matchOpenApiPath(pattern, path) {
+			return &val, nil
+		}
+	}
+
+	return nil, fmt.Errorf("path %s not found in contract", path)
 }
 
-// TODO: Get the request method and compare it to the OpenApiPathItem
+func matchOpenApiPath(pattern, path string) bool {
+	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+
+	if len(patternParts) != len(pathParts) {
+		return false
+	}
+
+	for i, part := range patternParts {
+		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+			// Path param: accept any non-empty segment
+			if pathParts[i] == "" {
+				return false
+			}
+			continue
+		}
+
+		if pathParts[i] != part {
+			return false
+		}
+	}
+
+	return true
+}
+
 func compareMethod(method string, pathItem *OpenApiPathItem) (*OpenApiOperation, error) {
 	if pathItem == nil {
 		return nil, fmt.Errorf("path item is nil")
