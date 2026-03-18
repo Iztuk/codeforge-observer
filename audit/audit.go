@@ -51,6 +51,23 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 		return errors, op
 	}
 
+	var bodyBytes []byte
+	if r.Body != nil {
+		bodyBytes, err = io.ReadAll(r.Body)
+		if err != nil {
+			errors = append(errors, err)
+			return errors, op
+		}
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
+
+	if len(bodyBytes) == 0 {
+		if op.RequestBody.Required {
+			errors = append(errors, fmt.Errorf("required request body is missing"))
+		}
+		return errors, op
+	}
+
 	ct := r.Header.Get("Content-Type")
 	ref, schema, err := fetchRequestBodySchema(ct, op)
 	if err != nil {
@@ -74,23 +91,6 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 		}
 
 		schema = resolved
-	}
-
-	var bodyBytes []byte
-	if r.Body != nil {
-		bodyBytes, err = io.ReadAll(r.Body)
-		if err != nil {
-			errors = append(errors, err)
-			return errors, op
-		}
-		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-	}
-
-	if len(bodyBytes) == 0 {
-		if op.RequestBody.Required {
-			errors = append(errors, fmt.Errorf("required request body is missing"))
-		}
-		return errors, op
 	}
 
 	var body any
@@ -122,6 +122,23 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		return errors
 	}
 
+	var bodyBytes []byte
+	if r.Body != nil {
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err != nil {
+			errors = append(errors, err)
+			return errors
+		}
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
+
+	if len(bodyBytes) == 0 {
+		if op.RequestBody.Required {
+			errors = append(errors, fmt.Errorf("required request body is missing"))
+		}
+		return errors
+	}
+
 	ct := r.Header.Get("Content-Type")
 	ref, schema, err := fetchResponseBodySchema(ct, &res)
 	if err != nil {
@@ -145,23 +162,6 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		}
 
 		schema = resolved
-	}
-
-	var bodyBytes []byte
-	if r.Body != nil {
-		bodyBytes, err = io.ReadAll(r.Body)
-		if err != nil {
-			errors = append(errors, err)
-			return errors
-		}
-		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-	}
-
-	if len(bodyBytes) == 0 {
-		if op.RequestBody.Required {
-			errors = append(errors, fmt.Errorf("required request body is missing"))
-		}
-		return errors
 	}
 
 	var body any
