@@ -111,6 +111,10 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 
 func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiComponents) []error {
 	var errors []error
+	if op == nil {
+		errors = append(errors, fmt.Errorf("operation is nil"))
+		return errors
+	}
 
 	res, ok := op.Responses[strconv.Itoa(r.StatusCode)]
 	if !ok {
