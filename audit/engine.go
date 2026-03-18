@@ -147,7 +147,7 @@ func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, 
 func compareBody(schema OpenApiSchemaRef, obj map[string]any) []error {
 	var errors []error
 	if schema.Type != "object" {
-		errors = append(errors, fmt.Errorf("expected type %s, got object", schema.Type))
+		errors = append(errors, fmt.Errorf("expected type object, got %s", schema.Type))
 		return errors
 	}
 
