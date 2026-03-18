@@ -33,52 +33,52 @@ type Observation struct {
 }
 
 func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOperation) {
-	var errors []error
+	var findings []error
 
 	pi, err := comparePath(r.URL.Path, contractsDoc.Paths)
 	if err != nil {
-		errors = append(errors, err)
-		return errors, nil
+		findings = append(findings, err)
+		return findings, nil
 	}
 
 	op, err := compareMethod(r.Method, pi)
 	if err != nil {
-		errors = append(errors, err)
-		return errors, nil
+		findings = append(findings, err)
+		return findings, nil
 	}
 
 	if op.RequestBody == nil {
-		return errors, op
+		return findings, op
 	}
 
 	var bodyBytes []byte
 	if r.Body != nil {
 		bodyBytes, err = io.ReadAll(r.Body)
 		if err != nil {
-			errors = append(errors, err)
-			return errors, op
+			findings = append(findings, err)
+			return findings, op
 		}
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
 	if len(bodyBytes) == 0 {
 		if op.RequestBody.Required {
-			errors = append(errors, fmt.Errorf("required request body is missing"))
+			findings = append(findings, fmt.Errorf("required request body is missing"))
 		}
-		return errors, op
+		return findings, op
 	}
 
 	ct := r.Header.Get("Content-Type")
 	ref, schema, err := fetchRequestBodySchema(ct, op)
 	if err != nil {
-		errors = append(errors, err)
-		return errors, op
+		findings = append(findings, err)
+		return findings, op
 	}
 
 	if ref != "" {
 		if contractsDoc.Components == nil {
-			errors = append(errors, fmt.Errorf("components are nil"))
-			return errors, op
+			findings = append(findings, fmt.Errorf("components are nil"))
+			return findings, op
 		}
 
 		const prefix = "#/components/schemas/"
@@ -86,8 +86,8 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 
 		resolved, ok := contractsDoc.Components.Schemas[name]
 		if !ok {
-			errors = append(errors, fmt.Errorf("schema ref not found: %s", ref))
-			return errors, op
+			findings = append(findings, fmt.Errorf("schema ref not found: %s", ref))
+			return findings, op
 		}
 
 		schema = resolved
@@ -95,63 +95,64 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 
 	var body any
 	if err := json.Unmarshal(bodyBytes, &body); err != nil {
-		errors = append(errors, err)
-		return errors, op
+		findings = append(findings, err)
+		return findings, op
 	}
 
 	obj, ok := body.(map[string]any)
 	if !ok {
-		errors = append(errors, fmt.Errorf("request body is not a JSON object"))
-		return errors, op
+		findings = append(findings, fmt.Errorf("request body is not a JSON object"))
+		return findings, op
 	}
 
-	errors = append(errors, compareBody(schema, obj)...)
-	return errors, op
+	findings = append(findings, compareBody(schema, obj)...)
+	return findings, op
 }
 
 func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiComponents) []error {
-	var errors []error
+	var findings []error
 	if op == nil {
-		errors = append(errors, fmt.Errorf("operation is nil"))
-		return errors
+		findings = append(findings, fmt.Errorf("operation is nil"))
+		return findings
 	}
 
 	res, ok := op.Responses[strconv.Itoa(r.StatusCode)]
 	if !ok {
-		errors = append(errors, fmt.Errorf("response status code not defined: %d", r.StatusCode))
-		return errors
+		findings = append(findings, fmt.Errorf("response status code not defined: %d", r.StatusCode))
+		return findings
 	}
 
 	if len(res.Content) == 0 {
-		return errors
+		return findings
 	}
 
 	var bodyBytes []byte
 	if r.Body != nil {
-		bodyBytes, err := io.ReadAll(r.Body)
+		var err error
+		bodyBytes, err = io.ReadAll(r.Body)
 		if err != nil {
-			errors = append(errors, err)
-			return errors
+			findings = append(findings, err)
+			return findings
 		}
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
 	if len(bodyBytes) == 0 {
-		errors = append(errors, fmt.Errorf("response body is missing"))
-		return errors
+		findings = append(findings, fmt.Errorf("response body is missing"))
+		return findings
 	}
 
 	ct := r.Header.Get("Content-Type")
 	ref, schema, err := fetchResponseBodySchema(ct, &res)
 	if err != nil {
-		errors = append(errors, err)
-		return errors
+		findings = append(findings, err)
+		return findings
 	}
 
 	if ref != "" {
 		if components == nil {
-			errors = append(errors, fmt.Errorf("components are nil"))
-			return errors
+			findings = append(findings, fmt.Errorf("components are nil"))
+			return findings
 		}
 
 		const prefix = "#/components/schemas/"
@@ -159,8 +160,8 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 
 		resolved, ok := components.Schemas[name]
 		if !ok {
-			errors = append(errors, fmt.Errorf("schema ref not found: %s", ref))
-			return errors
+			findings = append(findings, fmt.Errorf("schema ref not found: %s", ref))
+			return findings
 		}
 
 		schema = resolved
@@ -168,17 +169,17 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 
 	var body any
 	if err := json.Unmarshal(bodyBytes, &body); err != nil {
-		errors = append(errors, err)
-		return errors
+		findings = append(findings, err)
+		return findings
 	}
 
 	obj, ok := body.(map[string]any)
 	if !ok {
-		errors = append(errors, fmt.Errorf("response body is not a JSON object"))
-		return errors
+		findings = append(findings, fmt.Errorf("response body is not a JSON object"))
+		return findings
 	}
 
-	errors = append(errors, compareBody(schema, obj)...)
+	findings = append(findings, compareBody(schema, obj)...)
 
-	return errors
+	return findings
 }

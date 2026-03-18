@@ -63,6 +63,26 @@ func TestAuditRequest_RequiredBodyMissing(t *testing.T) {
 	}
 }
 
+func TestAuditRequest_RequiredBodyMissing_NoContentType(t *testing.T) {
+	doc := testContract()
+
+	req, err := http.NewRequest(http.MethodPost, "/api/accounts", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// NOTE: intentionally NOT setting Content-Type
+
+	errs, _ := AuditRequest(req, doc)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d", len(errs))
+	}
+
+	if !strings.Contains(errs[0].Error(), "required request body is missing") {
+		t.Fatalf("unexpected error: %v", errs[0])
+	}
+}
+
 func TestAuditRequest_MissingRequiredFields(t *testing.T) {
 	doc := testContract()
 

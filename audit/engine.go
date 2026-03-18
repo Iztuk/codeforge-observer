@@ -145,17 +145,17 @@ func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, 
 
 // Compares the fields between the request body and the contract definitions
 func compareBody(schema OpenApiSchemaRef, obj map[string]any) []error {
-	var errors []error
+	var findings []error
 	if schema.Type != "object" {
-		errors = append(errors, fmt.Errorf("expected type object, got %s", schema.Type))
-		return errors
+		findings = append(findings, fmt.Errorf("expected type object, got %s", schema.Type))
+		return findings
 	}
 
 	for _, field := range schema.Required {
 		if _, ok := obj[field]; !ok {
-			errors = append(errors, fmt.Errorf("missing required field: %s", field))
+			findings = append(findings, fmt.Errorf("missing required field: %s", field))
 		}
 	}
 
-	return errors
+	return findings
 }
