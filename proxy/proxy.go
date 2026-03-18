@@ -71,7 +71,12 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		*r = *r.WithContext(ctx)
 		writeObservation(logger, obs)
 
-		audit.AuditRequest(r)
+		errors := audit.AuditRequest(r, *h.Contracts)
+		if len(errors) > 0 {
+			for _, err := range errors {
+				logger.Println(err.Error())
+			}
+		}
 	}
 
 	rp.ModifyResponse = func(resp *http.Response) error {

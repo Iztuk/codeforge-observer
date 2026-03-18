@@ -3,6 +3,7 @@ package audit
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // TODO: Get the request path and find it from API contracts
@@ -60,4 +61,52 @@ func compareMethod(method string, pathItem *OpenApiPathItem) (*OpenApiOperation,
 	default:
 		return nil, fmt.Errorf("unsupported method %s", method)
 	}
+}
+
+func fetchSchemaRef(contentType string, op *OpenApiOperation) (string, OpenApiSchemaRef, error) {
+	if op == nil {
+		return "", OpenApiSchemaRef{}, fmt.Errorf("operation is nil")
+	}
+
+	if op.RequestBody == nil {
+		return "", OpenApiSchemaRef{}, fmt.Errorf("request body is not defined in contract")
+	}
+
+	// Content type normalization
+	ct := strings.Split(contentType, ";")[0]
+	ct = strings.TrimSpace(ct)
+
+	mt, ok := op.RequestBody.Content[ct]
+	if !ok {
+		return "", OpenApiSchemaRef{}, fmt.Errorf("content type not supported: %s", ct)
+	}
+
+	if mt.Schema == nil {
+		return "", OpenApiSchemaRef{}, fmt.Errorf("no schema defined for content type: %s", ct)
+	}
+
+	// Return the schema reference
+	if mt.Schema.Ref != "" {
+		return mt.Schema.Ref, OpenApiSchemaRef{}, nil
+	}
+
+	// If no schema reference, build the
+	return "", *mt.Schema, nil
+}
+
+// Compares the fields between the request body and the contract definitions
+func compareRequestBody(schema OpenApiSchemaRef, obj map[string]any) []error {
+	var errors []error
+	if schema.Type != "object" {
+		errors = append(errors, fmt.Errorf("expected type %s, got object", schema.Type))
+		return errors
+	}
+
+	for _, field := range schema.Required {
+		if _, ok := obj[field]; !ok {
+			errors = append(errors, fmt.Errorf("missing required field: %s", field))
+		}
+	}
+
+	return errors
 }
