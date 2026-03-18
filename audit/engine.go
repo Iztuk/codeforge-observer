@@ -63,7 +63,7 @@ func compareMethod(method string, pathItem *OpenApiPathItem) (*OpenApiOperation,
 	}
 }
 
-func fetchSchemaRef(contentType string, op *OpenApiOperation) (string, OpenApiSchemaRef, error) {
+func fetchRequestBodySchema(contentType string, op *OpenApiOperation) (string, OpenApiSchemaRef, error) {
 	if op == nil {
 		return "", OpenApiSchemaRef{}, fmt.Errorf("operation is nil")
 	}
@@ -90,12 +90,33 @@ func fetchSchemaRef(contentType string, op *OpenApiOperation) (string, OpenApiSc
 		return mt.Schema.Ref, OpenApiSchemaRef{}, nil
 	}
 
-	// If no schema reference, build the
+	return "", *mt.Schema, nil
+}
+
+func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, OpenApiSchemaRef, error) {
+	// Content type normalization
+	ct := strings.Split(contentType, ";")[0]
+	ct = strings.TrimSpace(ct)
+
+	mt, ok := res.Content[ct]
+	if !ok {
+		return "", OpenApiSchemaRef{}, fmt.Errorf("content type not supported: %s", ct)
+	}
+
+	if mt.Schema == nil {
+		return "", OpenApiSchemaRef{}, fmt.Errorf("no schema defined for content type: %s", ct)
+	}
+
+	// Return the schema reference
+	if mt.Schema.Ref != "" {
+		return mt.Schema.Ref, OpenApiSchemaRef{}, nil
+	}
+
 	return "", *mt.Schema, nil
 }
 
 // Compares the fields between the request body and the contract definitions
-func compareRequestBody(schema OpenApiSchemaRef, obj map[string]any) []error {
+func compareBody(schema OpenApiSchemaRef, obj map[string]any) []error {
 	var errors []error
 	if schema.Type != "object" {
 		errors = append(errors, fmt.Errorf("expected type %s, got object", schema.Type))

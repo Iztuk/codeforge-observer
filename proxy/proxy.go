@@ -48,6 +48,9 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		Contracts: &contracts,
 	}
 
+	var operation *audit.OpenApiOperation
+	var errors []error
+
 	originalDirector := rp.Director
 	rp.Director = func(r *http.Request) {
 		originalDirector(r)
@@ -71,7 +74,7 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		*r = *r.WithContext(ctx)
 		writeObservation(logger, obs)
 
-		errors := audit.AuditRequest(r, *h.Contracts)
+		errors, operation = audit.AuditRequest(r, *h.Contracts)
 		if len(errors) > 0 {
 			for _, err := range errors {
 				logger.Println(err.Error())
@@ -91,6 +94,13 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		obs.ResponseHeaders = cloneHeader(resp.Header)
 
 		writeObservation(logger, obs)
+
+		errors := audit.AuditResponse(resp, operation, h.Contracts.Components)
+		if len(errors) > 0 {
+			for _, err := range errors {
+				logger.Println(err.Error())
+			}
+		}
 		return nil
 	}
 
