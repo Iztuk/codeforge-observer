@@ -137,9 +137,7 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 	}
 
 	if len(bodyBytes) == 0 {
-		if op.RequestBody.Required {
-			errors = append(errors, fmt.Errorf("required request body is missing"))
-		}
+		errors = append(errors, fmt.Errorf("response body is missing"))
 		return errors
 	}
 
@@ -176,7 +174,7 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 
 	obj, ok := body.(map[string]any)
 	if !ok {
-		errors = append(errors, fmt.Errorf("request body is not a JSON object"))
+		errors = append(errors, fmt.Errorf("response body is not a JSON object"))
 		return errors
 	}
 
