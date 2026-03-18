@@ -80,3 +80,39 @@ func TestAuditResponse_Valid201(t *testing.T) {
 		t.Fatalf("expected no errors, got %v", errs)
 	}
 }
+
+func TestAuditResponse_NilOperation(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewBufferString(`{"ok": true}`)),
+	}
+
+	errs := AuditResponse(resp, nil, nil)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d", len(errs))
+	}
+	if !strings.Contains(errs[0].Error(), "operation is nil") {
+		t.Fatalf("unexpected error: %v", errs[0])
+	}
+}
+
+func TestAuditResponse_EmptyBody_WithDeclaredContent(t *testing.T) {
+	doc := testContract()
+	op := doc.Paths["/api/accounts"].POST
+
+	resp := &http.Response{
+		StatusCode: 201,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewBuffer(nil)), // empty body
+	}
+	resp.Header.Set("Content-Type", "application/json")
+
+	errs := AuditResponse(resp, op, doc.Components)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d", len(errs))
+	}
+	if !strings.Contains(errs[0].Error(), "response body is missing") {
+		t.Fatalf("unexpected error: %v", errs[0])
+	}
+}

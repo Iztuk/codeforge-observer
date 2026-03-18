@@ -137,7 +137,7 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
-	if len(bodyBytes) == 0 {
+	if len(bodyBytes) == 0 && len(res.Content) > 0 {
 		findings = append(findings, fmt.Errorf("response body is missing"))
 		return findings
 	}
