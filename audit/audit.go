@@ -1,6 +1,9 @@
 package audit
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
 
 type Observation struct {
 	Timestamp time.Time `json:"timestamp"`
@@ -21,4 +24,12 @@ type Observation struct {
 
 	RequestHeaders  map[string][]string `json:"request_headers,omitempty"`
 	ResponseHeaders map[string][]string `json:"response_headers,omitempty"`
+}
+
+func AuditRequest(r *http.Request) {
+
+}
+
+func AuditResponse(r *http.Response) {
+
 }

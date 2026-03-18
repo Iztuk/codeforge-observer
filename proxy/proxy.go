@@ -21,17 +21,18 @@ type ProxyManger struct {
 }
 
 type ProxyTarget struct {
-	Name     string
-	Upstream *url.URL
-	Proxy    *httputil.ReverseProxy
-	Logger   *log.Logger
+	Name      string
+	Upstream  *url.URL
+	Proxy     *httputil.ReverseProxy
+	Logger    *log.Logger
+	Contracts *audit.OpenApiDoc
 }
 
 type contextKey string
 
 const observationKey contextKey = "observation"
 
-func NewProxyHandler(target, hostName string, logger *log.Logger) (*ProxyTarget, error) {
+func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audit.OpenApiDoc) (*ProxyTarget, error) {
 	targetUrl, err := url.Parse(target)
 	if err != nil {
 		return nil, err
@@ -40,10 +41,11 @@ func NewProxyHandler(target, hostName string, logger *log.Logger) (*ProxyTarget,
 	rp := httputil.NewSingleHostReverseProxy(targetUrl)
 
 	h := &ProxyTarget{
-		Name:     hostName,
-		Upstream: targetUrl,
-		Proxy:    rp,
-		Logger:   logger,
+		Name:      hostName,
+		Upstream:  targetUrl,
+		Proxy:     rp,
+		Logger:    logger,
+		Contracts: &contracts,
 	}
 
 	originalDirector := rp.Director
@@ -68,6 +70,8 @@ func NewProxyHandler(target, hostName string, logger *log.Logger) (*ProxyTarget,
 		ctx := context.WithValue(r.Context(), observationKey, obs)
 		*r = *r.WithContext(ctx)
 		writeObservation(logger, obs)
+
+		audit.AuditRequest(r)
 	}
 
 	rp.ModifyResponse = func(resp *http.Response) error {
