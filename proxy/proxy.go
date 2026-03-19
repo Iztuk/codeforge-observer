@@ -21,17 +21,19 @@ type ProxyManger struct {
 }
 
 type ProxyTarget struct {
-	Name     string
-	Upstream *url.URL
-	Proxy    *httputil.ReverseProxy
-	Logger   *log.Logger
+	Name      string
+	Upstream  *url.URL
+	Proxy     *httputil.ReverseProxy
+	Logger    *log.Logger
+	Contracts *audit.OpenApiDoc
 }
 
 type contextKey string
 
 const observationKey contextKey = "observation"
+const operationKey contextKey = "operation"
 
-func NewProxyHandler(target, hostName string, logger *log.Logger) (*ProxyTarget, error) {
+func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audit.OpenApiDoc) (*ProxyTarget, error) {
 	targetUrl, err := url.Parse(target)
 	if err != nil {
 		return nil, err
@@ -40,10 +42,11 @@ func NewProxyHandler(target, hostName string, logger *log.Logger) (*ProxyTarget,
 	rp := httputil.NewSingleHostReverseProxy(targetUrl)
 
 	h := &ProxyTarget{
-		Name:     hostName,
-		Upstream: targetUrl,
-		Proxy:    rp,
-		Logger:   logger,
+		Name:      hostName,
+		Upstream:  targetUrl,
+		Proxy:     rp,
+		Logger:    logger,
+		Contracts: &contracts,
 	}
 
 	originalDirector := rp.Director
@@ -68,6 +71,17 @@ func NewProxyHandler(target, hostName string, logger *log.Logger) (*ProxyTarget,
 		ctx := context.WithValue(r.Context(), observationKey, obs)
 		*r = *r.WithContext(ctx)
 		writeObservation(logger, obs)
+
+		findings, op := audit.AuditRequest(r, *h.Contracts)
+		if op != nil {
+			ctx = context.WithValue(r.Context(), operationKey, op)
+			*r = *r.WithContext(ctx)
+		}
+		if len(findings) > 0 {
+			for _, err := range findings {
+				logger.Println(err.Error())
+			}
+		}
 	}
 
 	rp.ModifyResponse = func(resp *http.Response) error {
@@ -82,6 +96,17 @@ func NewProxyHandler(target, hostName string, logger *log.Logger) (*ProxyTarget,
 		obs.ResponseHeaders = cloneHeader(resp.Header)
 
 		writeObservation(logger, obs)
+
+		op, _ := resp.Request.Context().Value(operationKey).(*audit.OpenApiOperation)
+		if op == nil {
+			return nil
+		}
+		findings := audit.AuditResponse(resp, op, h.Contracts.Components)
+		if len(findings) > 0 {
+			for _, err := range findings {
+				logger.Println(err.Error())
+			}
+		}
 		return nil
 	}
 

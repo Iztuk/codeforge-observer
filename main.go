@@ -1,6 +1,7 @@
 package main
 
 import (
+	"codeforge-observer/audit"
 	"codeforge-observer/proxy"
 	"context"
 	"errors"
@@ -44,12 +45,19 @@ func main() {
 
 	logger.Printf("daemon started with pid=%d", pid)
 
-	apiProxy, err := proxy.NewProxyHandler("http://localhost:8081", "api.local", logger)
+	contracts, err := audit.ReadOpenApiDoc("codeforge.contracts.json")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	authProxy, err := proxy.NewProxyHandler("http://localhost:8082", "auth.local", logger)
+	apiProxy, err := proxy.NewProxyHandler("http://localhost:8081", "api.local", logger, contracts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	contracts, err = audit.ReadOpenApiDoc("codeforge.contracts.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	authProxy, err := proxy.NewProxyHandler("http://localhost:8082", "auth.local", logger, contracts)
 	if err != nil {
 		log.Fatal(err)
 	}
