@@ -7,6 +7,18 @@ type HostControlCommand struct {
 	Contract string `json:"contract"`
 }
 
+func AddHostCommand(host, upstream, contractFile string) error {
+	return nil
+}
+
+func RemoveHostCommand(host string) error {
+	return nil
+}
+
+func ListHostsCommand() error {
+	return nil
+}
+
 func (pm *ProxyManager) AddHost(host string, target *ProxyTarget) {
 	pm.Mu.Lock()
 	defer pm.Mu.Unlock()
