@@ -31,6 +31,7 @@ type ProxyTarget struct {
 type contextKey string
 
 const observationKey contextKey = "observation"
+const operationKey contextKey = "operation"
 
 func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audit.OpenApiDoc) (*ProxyTarget, error) {
 	targetUrl, err := url.Parse(target)
@@ -47,9 +48,6 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		Logger:    logger,
 		Contracts: &contracts,
 	}
-
-	var operation *audit.OpenApiOperation
-	var findings []error
 
 	originalDirector := rp.Director
 	rp.Director = func(r *http.Request) {
@@ -74,7 +72,11 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		*r = *r.WithContext(ctx)
 		writeObservation(logger, obs)
 
-		findings, operation = audit.AuditRequest(r, *h.Contracts)
+		findings, op := audit.AuditRequest(r, *h.Contracts)
+		if op != nil {
+			ctx = context.WithValue(r.Context(), operationKey, op)
+			*r = *r.WithContext(ctx)
+		}
 		if len(findings) > 0 {
 			for _, err := range findings {
 				logger.Println(err.Error())
@@ -95,7 +97,11 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 
 		writeObservation(logger, obs)
 
-		findings := audit.AuditResponse(resp, operation, h.Contracts.Components)
+		op, _ := resp.Request.Context().Value(operationKey).(*audit.OpenApiOperation)
+		if op == nil {
+			return nil
+		}
+		findings := audit.AuditResponse(resp, op, h.Contracts.Components)
 		if len(findings) > 0 {
 			for _, err := range findings {
 				logger.Println(err.Error())
