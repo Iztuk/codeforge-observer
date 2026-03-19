@@ -122,6 +122,9 @@ func fetchRequestBodySchema(contentType string, op *OpenApiOperation) (string, O
 }
 
 func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, OpenApiSchemaRef, error) {
+	if res == nil {
+		return "", OpenApiSchemaRef{}, fmt.Errorf("response is nil")
+	}
 	// Content type normalization
 	ct := strings.Split(contentType, ";")[0]
 	ct = strings.ToLower(strings.TrimSpace(ct))

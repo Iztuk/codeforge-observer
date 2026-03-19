@@ -134,8 +134,8 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		res, ok = op.Responses["default"]
 		if !ok {
 			findings = append(findings, fmt.Errorf("response status code not defined: %d", r.StatusCode))
+			return findings
 		}
-		return findings
 	}
 
 	if len(res.Content) == 0 {
