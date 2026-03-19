@@ -1,11 +1,14 @@
 package daemon
 
 import (
+	"codeforge-observer/audit"
 	"codeforge-observer/proxy"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -48,6 +51,22 @@ func RunDaemon() error {
 		Hosts:  make(map[string]*proxy.ProxyTarget),
 		Logger: logger,
 	}
+
+	// Remove stale socket file before binding
+	if _, err := os.Stat(sockFile); err == nil {
+		_ = os.Remove(sockFile)
+	}
+
+	controlLn, err := net.Listen("unix", sockFile)
+	if err != nil {
+		return fmt.Errorf("failed to listen on socket %s: %w", sockFile, err)
+	}
+	defer func() {
+		_ = controlLn.Close()
+		_ = os.Remove(sockFile)
+	}()
+
+	go acceptControlConnections(controlLn, pm)
 
 	server := &http.Server{
 		Addr:    listenAddr,
@@ -105,6 +124,83 @@ func ensureSingleInstance() error {
 	}
 
 	return nil
+}
+
+func acceptControlConnections(ln net.Listener, pm *proxy.ProxyManager) {
+	pm.Logger.Printf("control place listening on %s", sockFile)
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			// Listener likely closed during shutdown.
+			pm.Logger.Printf("control place accept error: %v", err)
+			return
+		}
+
+		go handleControlConn(conn, pm)
+	}
+}
+
+func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
+	defer conn.Close()
+
+	var cmd proxy.ControlCommand
+	if err := json.NewDecoder(conn).Decode(&cmd); err != nil {
+		_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+			OK:    false,
+			Error: fmt.Sprintf("invalid command: %v", err),
+		})
+		return
+	}
+
+	pm.Logger.Printf("control command received: action=%s host=%s upstream=%s contractFile=%s", cmd.Action, cmd.Host, cmd.Upstream, cmd.Contract)
+
+	switch cmd.Action {
+	case "add_host":
+		contract, err := audit.ReadOpenApiDoc(cmd.Contract)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+				OK:    false,
+				Error: err.Error(),
+			})
+		}
+
+		target, err := proxy.NewProxyHandler(cmd.Upstream, cmd.Host, pm.Logger, contract)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+				OK:    false,
+				Error: err.Error(),
+			})
+			return
+		}
+
+		pm.AddHost(cmd.Host, target)
+
+		_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+			OK:      true,
+			Message: "host added",
+		})
+	case "remove_host":
+		pm.RemoveHost(cmd.Host)
+		_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+			OK:      true,
+			Message: "host removed",
+		})
+
+	case "list_hosts":
+		hosts := pm.ListHosts()
+
+		_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+			OK:    true,
+			Hosts: hosts,
+		})
+
+	default:
+		_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+			OK:    false,
+			Error: fmt.Sprintf("unknown action: %s", cmd.Action),
+		})
+	}
 }
 
 func StopDaemon() error {
