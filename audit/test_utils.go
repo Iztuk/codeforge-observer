@@ -76,7 +76,12 @@ func testContract() OpenApiDoc {
 					Type:     "object",
 					Required: []string{"items"},
 					Properties: map[string]OpenApiSchemaRef{
-						"items": {Type: "object"},
+						"items": {
+							Type: "array",
+							Items: &OpenApiSchemaRef{
+								Ref: "#/components/schemas/AccountResponse",
+							},
+						},
 					},
 				},
 			},

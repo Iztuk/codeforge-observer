@@ -143,17 +143,51 @@ func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, 
 	return "", *mt.Schema, nil
 }
 
-// Compares the fields between the request body and the contract definitions
-func compareBody(schema OpenApiSchemaRef, obj map[string]any) []error {
+// Compares the fields between the request/response body and the contract definitions
+// NOTE:
+// This currently performs shallow validation:
+//   - Ensures correct top-level type (object/array)
+//   - Validates required fields for objects
+//   - Recursively validates array items
+//
+// TODO: (future enhancement)
+//   - Validate object properties recursively (nested objects)
+//   - Enforce property types (string, integer, boolean, etc.)
+//   - Support additional schema constraints (enum, format, min/max, length, etc.)
+//   - Detect unknown/extra fields not defined in schema
+//   - Improve error reporting with full JSON path (e.g., "items[0].email")
+//   - Support nullable and optional fields properly
+func compareBody(schema OpenApiSchemaRef, value any) []error {
 	var findings []error
-	if schema.Type != "object" {
-		findings = append(findings, fmt.Errorf("expected type object, got %s", schema.Type))
-		return findings
-	}
 
-	for _, field := range schema.Required {
-		if _, ok := obj[field]; !ok {
-			findings = append(findings, fmt.Errorf("missing required field: %s", field))
+	switch schema.Type {
+	case "object":
+		obj, ok := value.(map[string]any)
+		if !ok {
+			return []error{fmt.Errorf("expected object")}
+		}
+
+		for _, field := range schema.Required {
+			if _, ok := obj[field]; !ok {
+				findings = append(findings, fmt.Errorf("missing required field: %s", field))
+			}
+		}
+
+	case "array":
+		arr, ok := value.([]any)
+		if !ok {
+			return []error{fmt.Errorf("expected array")}
+		}
+
+		if schema.Items == nil {
+			return []error{fmt.Errorf("array schema missing items definition")}
+		}
+
+		for i, item := range arr {
+			itemFindings := compareBody(*schema.Items, item)
+			for _, err := range itemFindings {
+				findings = append(findings, fmt.Errorf("array index %d: %w", i, err))
+			}
 		}
 	}
 
