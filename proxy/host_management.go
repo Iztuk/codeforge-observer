@@ -118,8 +118,12 @@ func ListHostsCommand() error {
 	fmt.Printf("%-20s %-30s\n", "HOST", "UPSTREAM")
 	fmt.Println(strings.Repeat("-", 50))
 
-	for _, h := range resp.Hosts {
-		fmt.Printf("%-20s %-30s\n", h.Name, h.Upstream)
+	if len(resp.Hosts) == 0 {
+		fmt.Println("no hosts configured")
+	} else {
+		for _, h := range resp.Hosts {
+			fmt.Printf("%-20s %-30s\n", h.Name, h.Upstream)
+		}
 	}
 
 	return nil
