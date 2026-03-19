@@ -12,12 +12,14 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
-type ProxyManger struct {
+type ProxyManager struct {
 	Hosts  map[string]*ProxyTarget
 	Logger *log.Logger
+	Mu     sync.Mutex
 }
 
 type ProxyTarget struct {
@@ -124,7 +126,7 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 	return h, nil
 }
 
-func (pm *ProxyManger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (pm *ProxyManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := normalizeHost(r.Host)
 
 	target, ok := pm.Hosts[host]
