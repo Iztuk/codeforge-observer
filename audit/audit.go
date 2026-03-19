@@ -51,6 +51,15 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 		return findings, op
 	}
 
+	// TODO: Avoid unbounded buffering of request/response bodies.
+	// Current implementation uses io.ReadAll which can lead to high memory usage
+	// for large payloads (potential DoS vector in proxy scenarios).
+	//
+	// Future improvements:
+	//   - Enforce max body size (e.g., http.MaxBytesReader or manual limit)
+	//   - Stream/partial validation instead of full buffering
+	//   - Spool large bodies to disk instead of memory
+	//   - Make max size configurable per service
 	var bodyBytes []byte
 	if r.Body != nil {
 		bodyBytes, err = io.ReadAll(r.Body)
@@ -126,6 +135,15 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		return findings
 	}
 
+	// TODO: Avoid unbounded buffering of request/response bodies.
+	// Current implementation uses io.ReadAll which can lead to high memory usage
+	// for large payloads (potential DoS vector in proxy scenarios).
+	//
+	// Future improvements:
+	//   - Enforce max body size (e.g., http.MaxBytesReader or manual limit)
+	//   - Stream/partial validation instead of full buffering
+	//   - Spool large bodies to disk instead of memory
+	//   - Make max size configurable per service
 	var bodyBytes []byte
 	if r.Body != nil {
 		var err error
