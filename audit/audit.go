@@ -91,6 +91,10 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 		}
 
 		const prefix = "#/components/schemas/"
+		if !strings.HasPrefix(ref, prefix) {
+			findings = append(findings, fmt.Errorf("unsupported $ref format: %s", ref))
+			return findings, op
+		}
 		name := strings.TrimPrefix(ref, prefix)
 
 		resolved, ok := contractsDoc.Components.Schemas[name]
@@ -177,6 +181,10 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		}
 
 		const prefix = "#/components/schemas/"
+		if !strings.HasPrefix(ref, prefix) {
+			findings = append(findings, fmt.Errorf("unsupported $ref format: %s", ref))
+			return findings
+		}
 		name := strings.TrimPrefix(ref, prefix)
 
 		resolved, ok := components.Schemas[name]
