@@ -1,1 +1,6 @@
 codeforge.contracts.json
+
+# Binaries
+cf-observer
+*.exe
+*.out

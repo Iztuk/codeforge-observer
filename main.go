@@ -1,128 +1,85 @@
 package main
 
 import (
-	"codeforge-observer/audit"
+	"codeforge-observer/daemon"
 	"codeforge-observer/proxy"
-	"context"
-	"errors"
+	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"os/signal"
-	"strconv"
-	"strings"
-	"syscall"
-	"time"
-)
-
-const (
-	pidFile    = "/tmp/cf-observer.pid"
-	logFile    = "/tmp/cf-observer.log"
-	listenAddr = ":8080"
-	targetAddr = "http://localhost:8081"
 )
 
 func main() {
-	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to open log file: %v\n", err)
+	if len(os.Args) < 2 {
+		printRootUsage()
 		os.Exit(1)
 	}
-	defer f.Close()
 
-	logger := log.New(f, "cf-observer: ", log.LstdFlags)
-
-	if err := ensureSingleInstance(); err != nil {
-		logger.Fatalf("startup failed: %v", err)
+	if os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help" {
+		printRootUsage()
+		return
 	}
 
-	pid := os.Getpid()
-	if err := os.WriteFile(pidFile, fmt.Appendf([]byte{}, "%d", pid), 0644); err != nil {
-		logger.Fatalf("failed to write pid file: %v", err)
-	}
-	defer os.Remove(pidFile)
+	hostCmd := flag.NewFlagSet("host", flag.ExitOnError)
+	action := hostCmd.String("action", "", "add | remove | list hosts")
+	hostName := hostCmd.String("name", "", "set the host name")
+	upstream := hostCmd.String("upstream", "", "host's upstream URL")
+	contractFile := hostCmd.String("contract", "", "API contract file")
 
-	logger.Printf("daemon started with pid=%d", pid)
-
-	contracts, err := audit.ReadOpenApiDoc("codeforge.contracts.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	apiProxy, err := proxy.NewProxyHandler("http://localhost:8081", "api.local", logger, contracts)
-	if err != nil {
-		log.Fatal(err)
-	}
-	contracts, err = audit.ReadOpenApiDoc("codeforge.contracts.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	authProxy, err := proxy.NewProxyHandler("http://localhost:8082", "auth.local", logger, contracts)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	pm := &proxy.ProxyManger{
-		Hosts: map[string]*proxy.ProxyTarget{
-			"api.local":  apiProxy,
-			"auth.local": authProxy,
-		},
-		Logger: logger,
-	}
-
-	server := &http.Server{
-		Addr:    listenAddr,
-		Handler: pm,
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	go func() {
-		logger.Printf("proxy listening on %s and forwarding to %s", listenAddr, targetAddr)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Fatalf("server failed: %v", err)
+	cmdArg := os.Args[1]
+	switch cmdArg {
+	// NOTE: Run the daemon in the background when the project is ready for deployment
+	case "start":
+		if err := daemon.RunDaemon(); err != nil {
+			log.Fatal(err)
 		}
-	}()
+	case "stop":
+		if err := daemon.StopDaemon(); err != nil {
+			log.Fatal(err)
+		}
+	case "host":
+		if err := hostCmd.Parse(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
 
-	<-ctx.Done()
-	logger.Println("shutdown signal received, shutting down proxy")
+		switch *action {
+		case "add":
+			if *hostName == "" || *upstream == "" {
+				log.Fatal("host add requires -name and -upstream")
+			}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+			if err := proxy.AddHostCommand(*hostName, *upstream, *contractFile); err != nil {
+				log.Fatal(err)
+			}
+		case "remove":
+			if *hostName == "" {
+				log.Fatal("host remove requires -name")
+			}
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Printf("graceful shutdown failed: %v", err)
-	} else {
-		logger.Println("proxy stopped cleanly")
+			if err := proxy.RemoveHostCommand(*hostName); err != nil {
+				log.Fatal(err)
+			}
+		case "list":
+			if err := proxy.ListHostsCommand(); err != nil {
+				log.Fatal(err)
+			}
+		default:
+			log.Fatal("host requires -action add|remove|list")
+		}
+	default:
+		printRootUsage()
+		os.Exit(1)
 	}
+
 }
 
-func ensureSingleInstance() error {
-	data, err := os.ReadFile(pidFile)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-
-	pidStr := strings.TrimSpace(string(data))
-	pid, err := strconv.Atoi(pidStr)
-	if err != nil {
-		return fmt.Errorf("invalid pid file contents: %w", err)
-	}
-
-	// Signal 0 checks whether process exists without killing it.
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return nil
-	}
-
-	err = proc.Signal(syscall.Signal(0))
-	if err == nil {
-		return fmt.Errorf("daemon already running with pid=%d", pid)
-	}
-
-	return nil
+func printRootUsage() {
+	fmt.Println("Usage: cf-observer <command> [options]")
+	fmt.Println()
+	fmt.Println("Commands:")
+	fmt.Println("  start     Start the observer daemon")
+	fmt.Println("  stop      Stop the observer daemon")
+	fmt.Println("  host      Host management")
+	fmt.Println()
+	fmt.Println("Run 'cf-observer <command> -h' for command-specific help")
 }
