@@ -163,6 +163,7 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 				OK:    false,
 				Error: err.Error(),
 			})
+			return
 		}
 
 		target, err := proxy.NewProxyHandler(cmd.Upstream, cmd.Host, pm.Logger, contract)
