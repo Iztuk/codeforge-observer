@@ -139,8 +139,8 @@ func (pm *ProxyManager) RemoveHost(host string) {
 }
 
 func (pm *ProxyManager) ListHosts() []HostInfo {
-	pm.Mu.Lock()
-	defer pm.Mu.Unlock()
+	pm.Mu.RLock()
+	defer pm.Mu.RUnlock()
 	hosts := make([]HostInfo, 0, len(pm.Hosts))
 	for _, host := range pm.Hosts {
 		hosts = append(hosts, HostInfo{
