@@ -69,14 +69,20 @@ func RunDaemon() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	serverErr := make(chan error, 1)
 	go func() {
 		logger.Printf("proxy listening on %s", config.ListenAddr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("server failed: %v", err)
+			serverErr <- err
 		}
 	}()
 
-	<-ctx.Done()
+	select {
+	case err := <-serverErr:
+		return fmt.Errorf("server failed: %w", err)
+	case <-ctx.Done():
+	}
 	logger.Println("shutdown signal received, shutting down proxy")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
