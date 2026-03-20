@@ -131,7 +131,7 @@ func (pm *ProxyManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	pm.Mu.RLock()
 	target, ok := pm.Hosts[host]
-	pm.Mu.Unlock()
+	pm.Mu.RUnlock()
 
 	if !ok {
 		pm.Logger.Printf("no route found for host=%s rawHost=%s", host, r.Host)

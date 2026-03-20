@@ -204,6 +204,7 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 	}
 }
 
+// NOTE: Potential edge case: stale PID file could target wrong process
 func StopDaemon() error {
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
