@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"codeforge-observer/config"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -27,12 +28,8 @@ type HostInfo struct {
 	// Contract string `json:"contract"`
 }
 
-const (
-	sockFile = "/tmp/cf-observer.sock"
-)
-
 func AddHostCommand(host, upstream, contractFile string) error {
-	conn, err := net.Dial("unix", sockFile)
+	conn, err := net.Dial("unix", config.SockFile)
 	if err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
@@ -63,7 +60,7 @@ func AddHostCommand(host, upstream, contractFile string) error {
 }
 
 func RemoveHostCommand(host string) error {
-	conn, err := net.Dial("unix", sockFile)
+	conn, err := net.Dial("unix", config.SockFile)
 	if err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}
@@ -92,7 +89,7 @@ func RemoveHostCommand(host string) error {
 }
 
 func ListHostsCommand() error {
-	conn, err := net.Dial("unix", sockFile)
+	conn, err := net.Dial("unix", config.SockFile)
 	if err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
 	}

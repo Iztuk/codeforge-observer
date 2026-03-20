@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"codeforge-observer/audit"
+	"codeforge-observer/config"
 	"codeforge-observer/proxy"
 	"context"
 	"encoding/json"
@@ -18,16 +19,8 @@ import (
 	"time"
 )
 
-const (
-	pidFile    = "/tmp/cf-observer.pid"
-	logFile    = "/tmp/cf-observer.log"
-	sockFile   = "/tmp/cf-observer.sock"
-	listenAddr = ":8080"
-	targetAddr = "http://localhost:8081"
-)
-
 func RunDaemon() error {
-	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(config.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
@@ -40,10 +33,10 @@ func RunDaemon() error {
 	}
 
 	pid := os.Getpid()
-	if err := os.WriteFile(pidFile, fmt.Appendf([]byte{}, "%d", pid), 0644); err != nil {
+	if err := os.WriteFile(config.PidFile, fmt.Appendf([]byte{}, "%d", pid), 0644); err != nil {
 		return fmt.Errorf("failed to write pid file: %w", err)
 	}
-	defer os.Remove(pidFile)
+	defer os.Remove(config.PidFile)
 
 	logger.Printf("daemon started with pid=%d", pid)
 
@@ -53,23 +46,23 @@ func RunDaemon() error {
 	}
 
 	// Remove stale socket file before binding
-	if _, err := os.Stat(sockFile); err == nil {
-		_ = os.Remove(sockFile)
+	if _, err := os.Stat(config.SockFile); err == nil {
+		_ = os.Remove(config.SockFile)
 	}
 
-	controlLn, err := net.Listen("unix", sockFile)
+	controlLn, err := net.Listen("unix", config.SockFile)
 	if err != nil {
-		return fmt.Errorf("failed to listen on socket %s: %w", sockFile, err)
+		return fmt.Errorf("failed to listen on socket %s: %w", config.SockFile, err)
 	}
 	defer func() {
 		_ = controlLn.Close()
-		_ = os.Remove(sockFile)
+		_ = os.Remove(config.SockFile)
 	}()
 
 	go acceptControlConnections(controlLn, pm)
 
 	server := &http.Server{
-		Addr:    listenAddr,
+		Addr:    config.ListenAddr,
 		Handler: pm,
 	}
 
@@ -77,7 +70,7 @@ func RunDaemon() error {
 	defer stop()
 
 	go func() {
-		logger.Printf("proxy listening on %s", listenAddr)
+		logger.Printf("proxy listening on %s", config.ListenAddr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("server failed: %v", err)
 		}
@@ -98,7 +91,7 @@ func RunDaemon() error {
 }
 
 func ensureSingleInstance() error {
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(config.PidFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -127,7 +120,7 @@ func ensureSingleInstance() error {
 }
 
 func acceptControlConnections(ln net.Listener, pm *proxy.ProxyManager) {
-	pm.Logger.Printf("control plane listening on %s", sockFile)
+	pm.Logger.Printf("control plane listening on %s", config.SockFile)
 
 	for {
 		conn, err := ln.Accept()
@@ -206,7 +199,7 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 
 // NOTE: Potential edge case: stale PID file could target wrong process
 func StopDaemon() error {
-	data, err := os.ReadFile(pidFile)
+	data, err := os.ReadFile(config.PidFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("daemon is not running")
