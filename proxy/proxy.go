@@ -2,9 +2,8 @@ package proxy
 
 import (
 	"codeforge-observer/audit"
+	"codeforge-observer/utils"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net"
@@ -55,7 +54,7 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 	rp.Director = func(r *http.Request) {
 		originalDirector(r)
 
-		requestID := getOrCreateRequestID(r)
+		requestID := utils.GetOrCreateRequestID(r)
 		r.Header.Set("X-Request-ID", requestID)
 
 		obs := &audit.Observation{
@@ -151,19 +150,6 @@ func normalizeHost(host string) string {
 		}
 	}
 	return strings.ToLower(host)
-}
-
-func getOrCreateRequestID(r *http.Request) string {
-	if id := r.Header.Get("X-Request-ID"); id != "" {
-		return id
-	}
-
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return time.Now().UTC().Format("20060102150405.000000000")
-	}
-
-	return hex.EncodeToString(b[:])
 }
 
 func cloneHeader(h http.Header) map[string][]string {

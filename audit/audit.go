@@ -32,18 +32,22 @@ type Observation struct {
 	ResponseHeaders map[string][]string `json:"response_headers,omitempty"`
 }
 
-func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOperation) {
-	var findings []error
+func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApiOperation) {
+	var findings []Finding
 
-	pi, err := comparePath(r.URL.Path, contractsDoc.Paths)
-	if err != nil {
-		findings = append(findings, err)
+	pi, finding := comparePath(r.URL.Path, contractsDoc.Paths)
+	if finding != nil {
+		finding.Metadata = requestFindingMetadata(r)
+
+		findings = append(findings, *finding)
 		return findings, nil
 	}
 
-	op, err := compareMethod(r.Method, pi)
-	if err != nil {
-		findings = append(findings, err)
+	op, finding := compareMethod(r.Method, pi)
+	if finding != nil {
+		finding.Metadata = requestFindingMetadata(r)
+
+		findings = append(findings, *finding)
 		return findings, nil
 	}
 
@@ -61,10 +65,18 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 	//   - Spool large bodies to disk instead of memory
 	//   - Make max size configurable per service
 	var bodyBytes []byte
+	var err error
 	if r.Body != nil {
 		bodyBytes, err = io.ReadAll(r.Body)
 		if err != nil {
-			findings = append(findings, err)
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    RequestStage,
+				Severity: SeverityError,
+				Code:     CodeRequestBodyReadFailed,
+				Message:  fmt.Sprintf("error reading request body: %v", err),
+				Metadata: requestFindingMetadata(r),
+			})
 			return findings, op
 		}
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
@@ -72,34 +84,67 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 
 	if len(bodyBytes) == 0 {
 		if op.RequestBody.Required {
-			findings = append(findings, fmt.Errorf("required request body is missing"))
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    RequestStage,
+				Severity: SeverityError,
+				Code:     CodeRequestBodyMissing,
+				Message:  "required request body is missing",
+				Metadata: requestFindingMetadata(r),
+			})
 		}
 		return findings, op
 	}
 
 	ct := r.Header.Get("Content-Type")
-	ref, schema, err := fetchRequestBodySchema(ct, op)
-	if err != nil {
-		findings = append(findings, err)
+	ref, schema, finding := fetchRequestBodySchema(ct, op)
+	if finding != nil {
+		if finding.Metadata == nil {
+			finding.Metadata = &FindingMetadata{}
+		}
+		finding.Metadata = requestFindingMetadata(r)
+		findings = append(findings, *finding)
 		return findings, op
 	}
 
 	if ref != "" {
 		if contractsDoc.Components == nil {
-			findings = append(findings, fmt.Errorf("components are nil"))
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    RequestStage,
+				Severity: SeverityError,
+				Code:     CodeRequestSchemaMissing,
+				Message:  "components are nil",
+				Metadata: requestFindingMetadata(r),
+			})
 			return findings, op
 		}
 
 		const prefix = "#/components/schemas/"
 		if !strings.HasPrefix(ref, prefix) {
-			findings = append(findings, fmt.Errorf("unsupported $ref format: %s", ref))
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    RequestStage,
+				Severity: SeverityError,
+				Code:     CodeRequestSchemaRefNotFound,
+				Message:  fmt.Sprintf("unsupported $ref format: %s", ref),
+				Metadata: requestFindingMetadata(r),
+			})
 			return findings, op
 		}
+
 		name := strings.TrimPrefix(ref, prefix)
 
 		resolved, ok := contractsDoc.Components.Schemas[name]
 		if !ok {
-			findings = append(findings, fmt.Errorf("schema ref not found: %s", ref))
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    RequestStage,
+				Severity: SeverityError,
+				Code:     CodeRequestSchemaRefNotFound,
+				Message:  fmt.Sprintf("schema ref not found: %s", ref),
+				Metadata: requestFindingMetadata(r),
+			})
 			return findings, op
 		}
 
@@ -108,17 +153,30 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]error, *OpenApiOp
 
 	var body any
 	if err := json.Unmarshal(bodyBytes, &body); err != nil {
-		findings = append(findings, err)
+		findings = append(findings, Finding{
+			Source:   ApiContract,
+			Stage:    RequestStage,
+			Severity: SeverityError,
+			Code:     CodeRequestBodyInvalidJSON,
+			Message:  fmt.Sprintf("failed to unmarshal JSON: %v", err),
+			Metadata: requestFindingMetadata(r),
+		})
 		return findings, op
 	}
-
 	obj, ok := body.(map[string]any)
 	if !ok {
-		findings = append(findings, fmt.Errorf("request body is not a JSON object"))
+		findings = append(findings, Finding{
+			Source:   ApiContract,
+			Stage:    RequestStage,
+			Severity: SeverityError,
+			Code:     CodeRequestBodyInvalidJSON,
+			Message:  fmt.Sprintf("failed to unmarshal JSON: %v", err),
+			Metadata: requestFindingMetadata(r),
+		})
 		return findings, op
 	}
 
-	findings = append(findings, compareBody(schema, obj)...)
+	findings = append(findings, compareBody(schema, obj, RequestStage, r, nil)...)
 	return findings, op
 }
 
@@ -208,7 +266,7 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		return findings
 	}
 
-	findings = append(findings, compareBody(schema, obj)...)
+	findings = append(findings, compareBody(schema, obj, ResponseStage, nil, r)...)
 
 	return findings
 }

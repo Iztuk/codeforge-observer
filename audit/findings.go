@@ -1,5 +1,10 @@
 package audit
 
+import (
+	"codeforge-observer/utils"
+	"net/http"
+)
+
 type Finding struct {
 	Source   FindingSource    `json:"source"`
 	Stage    FindingStage     `json:"stage"`
@@ -41,6 +46,7 @@ const (
 	CodeRequestBodyInvalidJSON        FindingCode = "request_body_invalid_json"
 	CodeRequestBodyNotObject          FindingCode = "request_body_not_object"
 	CodeRequestBodyNotArray           FindingCode = "request_body_not_array"
+	CodeRequestBodyReadFailed         FindingCode = "request_body_read_failed"
 	CodeRequestContentTypeUnsupported FindingCode = "request_content_type_unsupported"
 	CodeRequestSchemaMissing          FindingCode = "request_schema_missing"
 	CodeRequestSchemaRefNotFound      FindingCode = "request_schema_ref_not_found"
@@ -97,3 +103,12 @@ const (
 	HttpHead    HttpMethod = "HEAD"
 	HttpOptions HttpMethod = "OPTIONS"
 )
+
+func requestFindingMetadata(r *http.Request) *FindingMetadata {
+	return &FindingMetadata{
+		RequestID: utils.GetOrCreateRequestID(r),
+		Host:      r.Host,
+		Path:      r.URL.Path,
+		Method:    HttpMethod(r.Method),
+	}
+}
