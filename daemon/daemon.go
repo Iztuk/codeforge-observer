@@ -127,13 +127,13 @@ func ensureSingleInstance() error {
 }
 
 func acceptControlConnections(ln net.Listener, pm *proxy.ProxyManager) {
-	pm.Logger.Printf("control place listening on %s", sockFile)
+	pm.Logger.Printf("control plane listening on %s", sockFile)
 
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			// Listener likely closed during shutdown.
-			pm.Logger.Printf("control place accept error: %v", err)
+			pm.Logger.Printf("control plane accept error: %v", err)
 			return
 		}
 
