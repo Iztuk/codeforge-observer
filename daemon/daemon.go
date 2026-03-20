@@ -77,7 +77,7 @@ func RunDaemon() error {
 	defer stop()
 
 	go func() {
-		logger.Printf("proxy listening on %s and forwarding to %s", listenAddr, targetAddr)
+		logger.Printf("proxy listening on %s", listenAddr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("server failed: %v", err)
 		}

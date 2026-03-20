@@ -19,7 +19,7 @@ import (
 type ProxyManager struct {
 	Hosts  map[string]*ProxyTarget
 	Logger *log.Logger
-	Mu     sync.Mutex
+	Mu     sync.RWMutex
 }
 
 type ProxyTarget struct {
@@ -129,7 +129,10 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 func (pm *ProxyManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	host := normalizeHost(r.Host)
 
+	pm.Mu.RLock()
 	target, ok := pm.Hosts[host]
+	pm.Mu.Unlock()
+
 	if !ok {
 		pm.Logger.Printf("no route found for host=%s rawHost=%s", host, r.Host)
 		http.NotFound(w, r)
