@@ -154,8 +154,8 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApi
 			Source:   ApiContract,
 			Stage:    RequestStage,
 			Severity: SeverityError,
-			Code:     CodeRequestBodyReadFailed,
-			Message:  fmt.Sprintf("error reading request body: %v", err),
+			Code:     CodeRequestBodyInvalidJSON,
+			Message:  fmt.Sprintf("failed to unmarshal JSON: %v", err),
 			Metadata: requestFindingMetadata(r),
 		})
 
@@ -167,8 +167,8 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApi
 			Source:   ApiContract,
 			Stage:    RequestStage,
 			Severity: SeverityError,
-			Code:     CodeRequestBodyInvalidJSON,
-			Message:  fmt.Sprintf("failed to unmarshal JSON: %v", err),
+			Code:     CodeRequestBodyNotObject,
+			Message:  "response body is not a JSON object",
 			Metadata: requestFindingMetadata(r),
 		}
 		f.Metadata.Body = body.(string)
@@ -312,8 +312,8 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 			Source:   ApiContract,
 			Stage:    ResponseStage,
 			Severity: SeverityError,
-			Code:     CodeResponseBodyReadFailed,
-			Message:  fmt.Sprintf("error reading request body: %v", err),
+			Code:     CodeResponseBodyInvalidJSON,
+			Message:  fmt.Sprintf("failed to unmarshall JSON: %v", err),
 			Metadata: responseFindingMetadata(r),
 		})
 		return findings
@@ -325,7 +325,7 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 			Source:   ApiContract,
 			Stage:    ResponseStage,
 			Severity: SeverityError,
-			Code:     CodeResponseBodyInvalidJSON,
+			Code:     CodeResponseBodyNotObject,
 			Message:  "response body is not a JSON object",
 			Metadata: responseFindingMetadata(r),
 		}
