@@ -79,8 +79,8 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 			*r = *r.WithContext(ctx)
 		}
 		if len(findings) > 0 {
-			for _, err := range findings {
-				logger.Println(err.Error())
+			for _, finding := range findings {
+				logger.Println(finding)
 			}
 		}
 	}
@@ -104,8 +104,8 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		}
 		findings := audit.AuditResponse(resp, op, h.Contracts.Components)
 		if len(findings) > 0 {
-			for _, err := range findings {
-				logger.Println(err.Error())
+			for _, finding := range findings {
+				logger.Println(finding)
 			}
 		}
 		return nil

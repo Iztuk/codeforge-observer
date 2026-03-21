@@ -4,115 +4,139 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 )
 
-func TestAuditResponse_StatusNotDefined(t *testing.T) {
-	doc := testContract()
-	op := doc.Paths["/api/accounts"].GET
+func makeTestResponseRequest(t *testing.T, method, path string) *http.Request {
+	t.Helper()
 
-	resp := &http.Response{
-		StatusCode: 500,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(bytes.NewBufferString(`{"message":"boom"}`)),
+	req, err := http.NewRequest(method, path, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	errs := AuditResponse(resp, op, doc.Components)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Error(), "response status code not defined: 500") {
-		t.Fatalf("unexpected error: %v", errs[0])
-	}
+	req.Host = "api.local"
+	return req
 }
 
-func TestAuditResponse_Documented404WithoutContent(t *testing.T) {
+func TestAuditResponse(t *testing.T) {
 	doc := testContract()
-	op := doc.Paths["/api/accounts"].GET
 
-	resp := &http.Response{
-		StatusCode: 404,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(bytes.NewBufferString(`<html>not found</html>`)),
+	tests := []struct {
+		name                 string
+		op                   *OpenApiOperation
+		method               string
+		path                 string
+		statusCode           int
+		body                 []byte
+		contentType          string
+		expectedFindingCodes []FindingCode
+		expectedMessages     []string
+	}{
+		{
+			name:                 "status not defined",
+			op:                   doc.Paths["/api/accounts"].GET,
+			method:               http.MethodGet,
+			path:                 "/api/accounts",
+			statusCode:           500,
+			body:                 []byte(`{"message":"boom"}`),
+			contentType:          "application/json",
+			expectedFindingCodes: []FindingCode{CodeResponseStatusNotDefined},
+			expectedMessages:     []string{"response status code not defined: 500"},
+		},
+		{
+			name:                 "documented 404 without content",
+			op:                   doc.Paths["/api/accounts"].GET,
+			method:               http.MethodGet,
+			path:                 "/api/accounts",
+			statusCode:           404,
+			body:                 []byte(`<html>not found</html>`),
+			contentType:          "text/html; charset=utf-8",
+			expectedFindingCodes: nil,
+			expectedMessages:     nil,
+		},
+		{
+			name:                 "missing required response fields",
+			op:                   doc.Paths["/api/accounts"].POST,
+			method:               http.MethodPost,
+			path:                 "/api/accounts",
+			statusCode:           201,
+			body:                 []byte(`{"id":"123"}`),
+			contentType:          "application/json",
+			expectedFindingCodes: []FindingCode{CodeResponseRequiredFieldMissing},
+			expectedMessages:     []string{"missing required field: email"},
+		},
+		{
+			name:                 "valid 201 response",
+			op:                   doc.Paths["/api/accounts"].POST,
+			method:               http.MethodPost,
+			path:                 "/api/accounts",
+			statusCode:           201,
+			body:                 []byte(`{"id":"123","email":"test@example.com"}`),
+			contentType:          "application/json",
+			expectedFindingCodes: nil,
+			expectedMessages:     nil,
+		},
+		{
+			name:                 "nil operation",
+			op:                   nil,
+			method:               http.MethodGet,
+			path:                 "/api/accounts",
+			statusCode:           200,
+			body:                 []byte(`{"ok": true}`),
+			contentType:          "application/json",
+			expectedFindingCodes: []FindingCode{CodeResponseOperationMissing},
+			expectedMessages:     []string{"operation is nil"},
+		},
+		{
+			name:                 "empty body with declared content",
+			op:                   doc.Paths["/api/accounts"].POST,
+			method:               http.MethodPost,
+			path:                 "/api/accounts",
+			statusCode:           201,
+			body:                 nil,
+			contentType:          "application/json",
+			expectedFindingCodes: []FindingCode{CodeResponseBodyMissing},
+			expectedMessages:     []string{"response body is missing"},
+		},
 	}
-	resp.Header.Set("Content-Type", "text/html; charset=utf-8")
 
-	errs := AuditResponse(resp, op, doc.Components)
-	if len(errs) != 0 {
-		t.Fatalf("expected no errors, got %v", errs)
-	}
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var rc io.ReadCloser
+			if tc.body == nil {
+				rc = io.NopCloser(bytes.NewBuffer(nil))
+			} else {
+				rc = io.NopCloser(bytes.NewBuffer(tc.body))
+			}
 
-func TestAuditResponse_MissingRequiredFields(t *testing.T) {
-	doc := testContract()
-	op := doc.Paths["/api/accounts"].POST
+			resp := &http.Response{
+				StatusCode: tc.statusCode,
+				Header:     make(http.Header),
+				Body:       rc,
+				Request:    makeTestResponseRequest(t, tc.method, tc.path),
+			}
 
-	resp := &http.Response{
-		StatusCode: 201,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(bytes.NewBufferString(`{"id":"123"}`)),
-	}
-	resp.Header.Set("Content-Type", "application/json")
+			if tc.contentType != "" {
+				resp.Header.Set("Content-Type", tc.contentType)
+			}
 
-	errs := AuditResponse(resp, op, doc.Components)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Error(), "missing required field: email") {
-		t.Fatalf("unexpected error: %v", errs[0])
-	}
-}
+			findings := AuditResponse(resp, tc.op, doc.Components)
 
-func TestAuditResponse_Valid201(t *testing.T) {
-	doc := testContract()
-	op := doc.Paths["/api/accounts"].POST
+			if len(findings) != len(tc.expectedFindingCodes) {
+				t.Fatalf("expected %d findings, got %d: %+v", len(tc.expectedFindingCodes), len(findings), findings)
+			}
 
-	resp := &http.Response{
-		StatusCode: 201,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(bytes.NewBufferString(`{"id":"123","email":"test@example.com"}`)),
-	}
-	resp.Header.Set("Content-Type", "application/json")
+			for i, expectedCode := range tc.expectedFindingCodes {
+				if findings[i].Code != expectedCode {
+					t.Fatalf("finding[%d]: expected code %q, got %q", i, expectedCode, findings[i].Code)
+				}
+			}
 
-	errs := AuditResponse(resp, op, doc.Components)
-	if len(errs) != 0 {
-		t.Fatalf("expected no errors, got %v", errs)
-	}
-}
-
-func TestAuditResponse_NilOperation(t *testing.T) {
-	resp := &http.Response{
-		StatusCode: 200,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(bytes.NewBufferString(`{"ok": true}`)),
-	}
-
-	errs := AuditResponse(resp, nil, nil)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Error(), "operation is nil") {
-		t.Fatalf("unexpected error: %v", errs[0])
-	}
-}
-
-func TestAuditResponse_EmptyBody_WithDeclaredContent(t *testing.T) {
-	doc := testContract()
-	op := doc.Paths["/api/accounts"].POST
-
-	resp := &http.Response{
-		StatusCode: 201,
-		Header:     make(http.Header),
-		Body:       io.NopCloser(bytes.NewBuffer(nil)), // empty body
-	}
-	resp.Header.Set("Content-Type", "application/json")
-
-	errs := AuditResponse(resp, op, doc.Components)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Error(), "response body is missing") {
-		t.Fatalf("unexpected error: %v", errs[0])
+			for i, expectedMsg := range tc.expectedMessages {
+				if findings[i].Message != expectedMsg {
+					t.Fatalf("finding[%d]: expected message %q, got %q", i, expectedMsg, findings[i].Message)
+				}
+			}
+		})
 	}
 }

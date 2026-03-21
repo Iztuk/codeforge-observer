@@ -2,119 +2,125 @@ package audit
 
 import (
 	"bytes"
-	"io"
 	"net/http"
-	"strings"
 	"testing"
 )
 
-func TestAuditRequest_PathNotFound(t *testing.T) {
+func TestAuditRequest(t *testing.T) {
+	tests := []struct {
+		name                 string
+		method               string
+		path                 string
+		body                 []byte
+		contentType          string
+		expectedOpNil        bool
+		expectedFindingCodes []FindingCode
+		expectedMessages     []string
+	}{
+		{
+			name:                 "request path not found",
+			method:               http.MethodGet,
+			path:                 "/does-not-exist",
+			expectedOpNil:        true,
+			expectedFindingCodes: []FindingCode{CodePathNotFound},
+			expectedMessages:     []string{"path /does-not-exist not found in contract"},
+		},
+		{
+			name:                 "method not defined",
+			method:               http.MethodDelete,
+			path:                 "/api/accounts",
+			expectedOpNil:        true,
+			expectedFindingCodes: []FindingCode{CodeMethodNotDefined},
+			expectedMessages:     []string{"method DELETE not defined for path"},
+		},
+		{
+			name:                 "required body missing with content type",
+			method:               http.MethodPost,
+			path:                 "/api/accounts",
+			contentType:          "application/json",
+			expectedOpNil:        false,
+			expectedFindingCodes: []FindingCode{CodeRequestBodyMissing},
+			expectedMessages:     []string{"required request body is missing"},
+		},
+		{
+			name:                 "required body missing without content type",
+			method:               http.MethodPost,
+			path:                 "/api/accounts",
+			expectedOpNil:        false,
+			expectedFindingCodes: []FindingCode{CodeRequestBodyMissing},
+			expectedMessages:     []string{"required request body is missing"},
+		},
+		{
+			name:          "missing required fields",
+			method:        http.MethodPost,
+			path:          "/api/accounts",
+			body:          []byte(`{}`),
+			contentType:   "application/json",
+			expectedOpNil: false,
+			expectedFindingCodes: []FindingCode{
+				CodeRequestRequiredFieldMissing,
+				CodeRequestRequiredFieldMissing,
+			},
+			expectedMessages: []string{
+				"missing required field: email",
+				"missing required field: password",
+			},
+		},
+		{
+			name:          "valid post",
+			method:        http.MethodPost,
+			path:          "/api/accounts",
+			body:          []byte(`{"email":"test@example.com","password":"secret"}`),
+			contentType:   "application/json",
+			expectedOpNil: false,
+		},
+	}
+
 	doc := testContract()
 
-	req, err := http.NewRequest(http.MethodGet, "/does-not-exist", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var bodyReader *bytes.Reader
+			if tc.body != nil {
+				bodyReader = bytes.NewReader(tc.body)
+			} else {
+				bodyReader = bytes.NewReader(nil)
+			}
 
-	errs, op := AuditRequest(req, doc)
-	if op != nil {
-		t.Fatalf("expected nil operation")
-	}
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Error(), "path /does-not-exist not found in contract") {
-		t.Fatalf("unexpected error: %v", errs[0])
-	}
-}
+			req, err := http.NewRequest(tc.method, tc.path, bodyReader)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-func TestAuditRequest_MethodNotDefined(t *testing.T) {
-	doc := testContract()
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
 
-	req, err := http.NewRequest(http.MethodDelete, "/api/accounts", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+			findings, op := AuditRequest(req, doc)
 
-	errs, _ := AuditRequest(req, doc)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Error(), "method DELETE not defined for path") {
-		t.Fatalf("unexpected error: %v", errs[0])
-	}
-}
+			if tc.expectedOpNil && op != nil {
+				t.Fatalf("expected nil operation, got non-nil")
+			}
+			if !tc.expectedOpNil && op == nil {
+				t.Fatalf("expected non-nil operation, got nil")
+			}
 
-func TestAuditRequest_RequiredBodyMissing(t *testing.T) {
-	doc := testContract()
+			if len(findings) != len(tc.expectedFindingCodes) {
+				t.Fatalf("expected %d findings, got %d: %+v", len(tc.expectedFindingCodes), len(findings), findings)
+			}
 
-	req, err := http.NewRequest(http.MethodPost, "/api/accounts", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
+			for i, expectedCode := range tc.expectedFindingCodes {
+				if findings[i].Code != expectedCode {
+					t.Fatalf("finding[%d]: expected code %q, got %q", i, expectedCode, findings[i].Code)
+				}
+			}
 
-	errs, _ := AuditRequest(req, doc)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-	if !strings.Contains(errs[0].Error(), "required request body is missing") {
-		t.Fatalf("unexpected error: %v", errs[0])
-	}
-}
-
-func TestAuditRequest_RequiredBodyMissing_NoContentType(t *testing.T) {
-	doc := testContract()
-
-	req, err := http.NewRequest(http.MethodPost, "/api/accounts", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// NOTE: intentionally NOT setting Content-Type
-
-	errs, _ := AuditRequest(req, doc)
-	if len(errs) != 1 {
-		t.Fatalf("expected 1 error, got %d", len(errs))
-	}
-
-	if !strings.Contains(errs[0].Error(), "required request body is missing") {
-		t.Fatalf("unexpected error: %v", errs[0])
-	}
-}
-
-func TestAuditRequest_MissingRequiredFields(t *testing.T) {
-	doc := testContract()
-
-	body := []byte(`{}`)
-	req, err := http.NewRequest(http.MethodPost, "/api/accounts", io.NopCloser(bytes.NewBuffer(body)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	errs, _ := AuditRequest(req, doc)
-	if len(errs) != 2 {
-		t.Fatalf("expected 2 errors, got %d", len(errs))
-	}
-}
-
-func TestAuditRequest_ValidPost(t *testing.T) {
-	doc := testContract()
-
-	body := []byte(`{"email":"test@example.com","password":"secret"}`)
-	req, err := http.NewRequest(http.MethodPost, "/api/accounts", io.NopCloser(bytes.NewBuffer(body)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	errs, op := AuditRequest(req, doc)
-	if op == nil {
-		t.Fatalf("expected operation")
-	}
-	if len(errs) != 0 {
-		t.Fatalf("expected no errors, got %v", errs)
+			for i, expectedMsg := range tc.expectedMessages {
+				if findings[i].Message != expectedMsg {
+					t.Fatalf("finding[%d]: expected message %q, got %q", i, expectedMsg, findings[i].Message)
+				}
+			}
+		})
 	}
 }
 
@@ -149,7 +155,7 @@ func TestOpenApiPathPattern(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actual := matchOpenApiPath(tc.pattern, tc.path)
 			if actual != tc.expected {
-				t.Errorf("matchOpenApiPath(%s, %s) = %t; expected %t", tc.pattern, tc.path, actual, tc.expected)
+				t.Fatalf("matchOpenApiPath(%s, %s) = %t; expected %t", tc.pattern, tc.path, actual, tc.expected)
 			}
 		})
 	}

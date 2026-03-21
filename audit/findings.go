@@ -116,11 +116,16 @@ func requestFindingMetadata(r *http.Request) *FindingMetadata {
 	}
 }
 
-func responseFindingMetadata(r *http.Response) *FindingMetadata {
-	return &FindingMetadata{
-		RequestID: utils.GetOrCreateRequestID(r.Request),
-		Host:      r.Request.Host,
-		Path:      r.Request.URL.Path,
-		Method:    HttpMethod(r.Request.Method),
+func responseFindingMetadata(res *http.Response) *FindingMetadata {
+	md := &FindingMetadata{}
+
+	if res == nil || res.Request == nil {
+		return md
 	}
+
+	md.RequestID = utils.GetOrCreateRequestID(res.Request)
+	md.Host = res.Request.Host
+	md.Path = res.Request.URL.Path
+	md.Method = HttpMethod(res.Request.Method)
+	return md
 }
