@@ -99,9 +99,6 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApi
 	ct := r.Header.Get("Content-Type")
 	ref, schema, finding := fetchRequestBodySchema(ct, op)
 	if finding != nil {
-		if finding.Metadata == nil {
-			finding.Metadata = &FindingMetadata{}
-		}
 		finding.Metadata = requestFindingMetadata(r)
 		findings = append(findings, *finding)
 		return findings, op
@@ -157,22 +154,26 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApi
 			Source:   ApiContract,
 			Stage:    RequestStage,
 			Severity: SeverityError,
-			Code:     CodeRequestBodyInvalidJSON,
-			Message:  fmt.Sprintf("failed to unmarshal JSON: %v", err),
+			Code:     CodeRequestBodyReadFailed,
+			Message:  fmt.Sprintf("error reading request body: %v", err),
 			Metadata: requestFindingMetadata(r),
 		})
+
 		return findings, op
 	}
 	obj, ok := body.(map[string]any)
 	if !ok {
-		findings = append(findings, Finding{
+		f := Finding{
 			Source:   ApiContract,
 			Stage:    RequestStage,
 			Severity: SeverityError,
 			Code:     CodeRequestBodyInvalidJSON,
 			Message:  fmt.Sprintf("failed to unmarshal JSON: %v", err),
 			Metadata: requestFindingMetadata(r),
-		})
+		}
+		f.Metadata.Body = body.(string)
+		findings = append(findings, f)
+
 		return findings, op
 	}
 
@@ -180,10 +181,17 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApi
 	return findings, op
 }
 
-func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiComponents) []error {
-	var findings []error
+func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiComponents) []Finding {
+	var findings []Finding
 	if op == nil {
-		findings = append(findings, fmt.Errorf("operation is nil"))
+		findings = append(findings, Finding{
+			Source:   ApiContract,
+			Stage:    ResponseStage,
+			Severity: SeverityError,
+			Code:     CodeResponseOperationMissing,
+			Message:  "operation is nil",
+			Metadata: responseFindingMetadata(r),
+		})
 		return findings
 	}
 
@@ -191,7 +199,15 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 	if !ok {
 		res, ok = op.Responses["default"]
 		if !ok {
-			findings = append(findings, fmt.Errorf("response status code not defined: %d", r.StatusCode))
+
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    ResponseStage,
+				Severity: SeverityError,
+				Code:     CodeResponseStatusNotDefined,
+				Message:  fmt.Sprintf("response status code not defined: %d", r.StatusCode),
+				Metadata: responseFindingMetadata(r),
+			})
 			return findings
 		}
 	}
@@ -214,40 +230,76 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		var err error
 		bodyBytes, err = io.ReadAll(r.Body)
 		if err != nil {
-			findings = append(findings, err)
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    ResponseStage,
+				Severity: SeverityError,
+				Code:     CodeResponseBodyReadFailed,
+				Message:  fmt.Sprintf("error reading request body: %v", err),
+				Metadata: responseFindingMetadata(r),
+			})
 			return findings
 		}
 		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
 	if len(bodyBytes) == 0 && len(res.Content) > 0 {
-		findings = append(findings, fmt.Errorf("response body is missing"))
+		findings = append(findings, Finding{
+			Source:   ApiContract,
+			Stage:    ResponseStage,
+			Severity: SeverityError,
+			Code:     CodeResponseBodyMissing,
+			Message:  "response body is missing",
+			Metadata: responseFindingMetadata(r),
+		})
 		return findings
 	}
 
 	ct := r.Header.Get("Content-Type")
-	ref, schema, err := fetchResponseBodySchema(ct, &res)
-	if err != nil {
-		findings = append(findings, err)
+	ref, schema, finding := fetchResponseBodySchema(ct, &res)
+	if finding != nil {
+		finding.Metadata = responseFindingMetadata(r)
+		findings = append(findings, *finding)
 		return findings
 	}
 
 	if ref != "" {
 		if components == nil {
-			findings = append(findings, fmt.Errorf("components are nil"))
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    ResponseStage,
+				Severity: SeverityError,
+				Code:     CodeResponseSchemaMissing,
+				Message:  "components are nil",
+				Metadata: responseFindingMetadata(r),
+			})
 			return findings
 		}
 
 		const prefix = "#/components/schemas/"
 		if !strings.HasPrefix(ref, prefix) {
-			findings = append(findings, fmt.Errorf("unsupported $ref format: %s", ref))
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    ResponseStage,
+				Severity: SeverityError,
+				Code:     CodeResponseSchemaRefNotFound,
+				Message:  fmt.Sprintf("unsupported $ref format: %s", ref),
+				Metadata: responseFindingMetadata(r),
+			})
 			return findings
 		}
 		name := strings.TrimPrefix(ref, prefix)
 
 		resolved, ok := components.Schemas[name]
 		if !ok {
-			findings = append(findings, fmt.Errorf("schema ref not found: %s", ref))
+			findings = append(findings, Finding{
+				Source:   ApiContract,
+				Stage:    ResponseStage,
+				Severity: SeverityError,
+				Code:     CodeResponseSchemaRefNotFound,
+				Message:  fmt.Sprintf("schema ref not found: %s", ref),
+				Metadata: responseFindingMetadata(r),
+			})
 			return findings
 		}
 
@@ -256,13 +308,29 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 
 	var body any
 	if err := json.Unmarshal(bodyBytes, &body); err != nil {
-		findings = append(findings, err)
+		findings = append(findings, Finding{
+			Source:   ApiContract,
+			Stage:    ResponseStage,
+			Severity: SeverityError,
+			Code:     CodeResponseBodyReadFailed,
+			Message:  fmt.Sprintf("error reading request body: %v", err),
+			Metadata: responseFindingMetadata(r),
+		})
 		return findings
 	}
 
 	obj, ok := body.(map[string]any)
 	if !ok {
-		findings = append(findings, fmt.Errorf("response body is not a JSON object"))
+		f := Finding{
+			Source:   ApiContract,
+			Stage:    ResponseStage,
+			Severity: SeverityError,
+			Code:     CodeResponseBodyInvalidJSON,
+			Message:  "response body is not a JSON object",
+			Metadata: responseFindingMetadata(r),
+		}
+		f.Metadata.Body = body.(string)
+		findings = append(findings, f)
 		return findings
 	}
 

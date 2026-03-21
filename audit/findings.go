@@ -58,6 +58,7 @@ const (
 
 	CodeResponseStatusNotDefined       FindingCode = "response_status_not_defined"
 	CodeResponseBodyMissing            FindingCode = "response_body_missing"
+	CodeResponseBodyReadFailed         FindingCode = "response_body_read_failed"
 	CodeResponseBodyInvalidJSON        FindingCode = "response_body_invalid_json"
 	CodeResponseBodyNotObject          FindingCode = "response_body_not_object"
 	CodeResponseBodyNotArray           FindingCode = "response_body_not_array"
@@ -66,6 +67,7 @@ const (
 	CodeResponseSchemaRefNotFound      FindingCode = "response_schema_ref_not_found"
 	CodeResponseRequiredFieldMissing   FindingCode = "response_required_field_missing"
 	CodeResponseTypeMismatch           FindingCode = "response_type_mismatch"
+	CodeResponseOperationMissing       FindingCode = "response_operation_missing"
 
 	// ---- Resource contract: request ----
 
@@ -87,6 +89,7 @@ type FindingMetadata struct {
 	Host        string     `json:"host,omitempty"`
 	Path        string     `json:"path,omitempty"`
 	Method      HttpMethod `json:"method,omitempty"`
+	Body        string     `json:"body,omitempty"`
 	OperationID string     `json:"operation_id,omitempty"`
 	Field       string     `json:"field,omitempty"`
 	Resource    string     `json:"resource,omitempty"`
@@ -110,5 +113,14 @@ func requestFindingMetadata(r *http.Request) *FindingMetadata {
 		Host:      r.Host,
 		Path:      r.URL.Path,
 		Method:    HttpMethod(r.Method),
+	}
+}
+
+func responseFindingMetadata(r *http.Response) *FindingMetadata {
+	return &FindingMetadata{
+		RequestID: utils.GetOrCreateRequestID(r.Request),
+		Host:      r.Request.Host,
+		Path:      r.Request.URL.Path,
+		Method:    HttpMethod(r.Request.Method),
 	}
 }

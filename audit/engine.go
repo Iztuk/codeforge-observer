@@ -127,21 +127,30 @@ func fetchRequestBodySchema(contentType string, op *OpenApiOperation) (string, O
 	return "", *mt.Schema, nil
 }
 
-func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, OpenApiSchemaRef, error) {
-	if res == nil {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("response is nil")
-	}
+func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, OpenApiSchemaRef, *Finding) {
 	// Content type normalization
 	ct := strings.Split(contentType, ";")[0]
 	ct = strings.ToLower(strings.TrimSpace(ct))
 
 	mt, ok := res.Content[ct]
 	if !ok {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("content type not supported: %s", ct)
+		return "", OpenApiSchemaRef{}, &Finding{
+			Source:   ApiContract,
+			Stage:    ResponseStage,
+			Severity: SeverityError,
+			Code:     CodeResponseContentTypeUnsupported,
+			Message:  fmt.Sprintf("content type not supported: %s", ct),
+		}
 	}
 
 	if mt.Schema == nil {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("no schema defined for content type: %s", ct)
+		return "", OpenApiSchemaRef{}, &Finding{
+			Source:   ApiContract,
+			Stage:    ResponseStage,
+			Severity: SeverityError,
+			Code:     CodeResponseSchemaMissing,
+			Message:  fmt.Sprintf("no schema defined for content type: %s", ct),
+		}
 	}
 
 	// Return the schema reference
