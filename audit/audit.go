@@ -161,23 +161,8 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApi
 
 		return findings, op
 	}
-	obj, ok := body.(map[string]any)
-	if !ok {
-		f := Finding{
-			Source:   ApiContract,
-			Stage:    RequestStage,
-			Severity: SeverityError,
-			Code:     CodeRequestBodyNotObject,
-			Message:  "response body is not a JSON object",
-			Metadata: requestFindingMetadata(r),
-		}
-		f.Metadata.Body = body.(string)
-		findings = append(findings, f)
 
-		return findings, op
-	}
-
-	findings = append(findings, compareBody(schema, obj, RequestStage, r, nil)...)
+	findings = append(findings, compareBody(schema, body, RequestStage, r, nil)...)
 	return findings, op
 }
 
@@ -319,22 +304,7 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 		return findings
 	}
 
-	obj, ok := body.(map[string]any)
-	if !ok {
-		f := Finding{
-			Source:   ApiContract,
-			Stage:    ResponseStage,
-			Severity: SeverityError,
-			Code:     CodeResponseBodyNotObject,
-			Message:  "response body is not a JSON object",
-			Metadata: responseFindingMetadata(r),
-		}
-		f.Metadata.Body = body.(string)
-		findings = append(findings, f)
-		return findings
-	}
-
-	findings = append(findings, compareBody(schema, obj, ResponseStage, nil, r)...)
+	findings = append(findings, compareBody(schema, body, ResponseStage, nil, r)...)
 
 	return findings
 }
