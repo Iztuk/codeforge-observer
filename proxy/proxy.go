@@ -55,7 +55,6 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		originalDirector(r)
 
 		requestID := utils.GetOrCreateRequestID(r)
-		r.Header.Set("X-Request-ID", requestID)
 
 		obs := &audit.Observation{
 			Timestamp:      time.Now().UTC(),

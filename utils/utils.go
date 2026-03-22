@@ -12,10 +12,16 @@ func GetOrCreateRequestID(r *http.Request) string {
 		return id
 	}
 
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return time.Now().UTC().Format("20060102150405.000000000")
+	if r.Header == nil {
+		r.Header = make(http.Header)
 	}
 
-	return hex.EncodeToString(b[:])
+	var b [16]byte
+	id := time.Now().UTC().Format("20060102150405.000000000")
+	if _, err := rand.Read(b[:]); err == nil {
+		id = hex.EncodeToString(b[:])
+	}
+	r.Header.Set("X-Request-ID", id)
+
+	return id
 }
