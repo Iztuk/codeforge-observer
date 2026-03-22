@@ -2,9 +2,8 @@ package proxy
 
 import (
 	"codeforge-observer/audit"
+	"codeforge-observer/utils"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net"
@@ -55,8 +54,7 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 	rp.Director = func(r *http.Request) {
 		originalDirector(r)
 
-		requestID := getOrCreateRequestID(r)
-		r.Header.Set("X-Request-ID", requestID)
+		requestID := utils.GetOrCreateRequestID(r)
 
 		obs := &audit.Observation{
 			Timestamp:      time.Now().UTC(),
@@ -80,8 +78,8 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 			*r = *r.WithContext(ctx)
 		}
 		if len(findings) > 0 {
-			for _, err := range findings {
-				logger.Println(err.Error())
+			for _, finding := range findings {
+				logger.Println(finding)
 			}
 		}
 	}
@@ -105,8 +103,8 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		}
 		findings := audit.AuditResponse(resp, op, h.Contracts.Components)
 		if len(findings) > 0 {
-			for _, err := range findings {
-				logger.Println(err.Error())
+			for _, finding := range findings {
+				logger.Println(finding)
 			}
 		}
 		return nil
@@ -151,19 +149,6 @@ func normalizeHost(host string) string {
 		}
 	}
 	return strings.ToLower(host)
-}
-
-func getOrCreateRequestID(r *http.Request) string {
-	if id := r.Header.Get("X-Request-ID"); id != "" {
-		return id
-	}
-
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return time.Now().UTC().Format("20060102150405.000000000")
-	}
-
-	return hex.EncodeToString(b[:])
 }
 
 func cloneHeader(h http.Header) map[string][]string {

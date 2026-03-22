@@ -1,12 +1,13 @@
 package audit
 
 import (
+	"codeforge-observer/utils"
 	"fmt"
 	"net/http"
 	"strings"
 )
 
-func comparePath(path string, contractPaths map[string]OpenApiPathItem) (*OpenApiPathItem, error) {
+func comparePath(path string, contractPaths map[string]OpenApiPathItem) (*OpenApiPathItem, *Finding) {
 	if val, ok := contractPaths[path]; ok {
 		return &val, nil
 	}
@@ -17,7 +18,13 @@ func comparePath(path string, contractPaths map[string]OpenApiPathItem) (*OpenAp
 		}
 	}
 
-	return nil, fmt.Errorf("path %s not found in contract", path)
+	return nil, &Finding{
+		Source:   ApiContract,
+		Stage:    RequestStage,
+		Severity: SeverityError,
+		Code:     CodePathNotFound,
+		Message:  fmt.Sprintf("path %s not found in contract", path),
+	}
 }
 
 func matchOpenApiPath(pattern, path string) bool {
@@ -45,72 +52,71 @@ func matchOpenApiPath(pattern, path string) bool {
 	return true
 }
 
-func compareMethod(method string, pathItem *OpenApiPathItem) (*OpenApiOperation, error) {
-	if pathItem == nil {
-		return nil, fmt.Errorf("path item is nil")
-	}
+func compareMethod(method string, pathItem *OpenApiPathItem) (*OpenApiOperation, *Finding) {
+	var op *OpenApiOperation
 
 	switch method {
 	case http.MethodGet:
-		if pathItem.GET == nil {
-			return nil, fmt.Errorf("method %s not defined for path", method)
-		}
-		return pathItem.GET, nil
+		op = pathItem.GET
 	case http.MethodPost:
-		if pathItem.POST == nil {
-			return nil, fmt.Errorf("method %s not defined for path", method)
-		}
-		return pathItem.POST, nil
+		op = pathItem.POST
 	case http.MethodPut:
-		if pathItem.PUT == nil {
-			return nil, fmt.Errorf("method %s not defined for path", method)
-		}
-		return pathItem.PUT, nil
+		op = pathItem.PUT
 	case http.MethodPatch:
-		if pathItem.PATCH == nil {
-			return nil, fmt.Errorf("method %s not defined for path", method)
-		}
-		return pathItem.PATCH, nil
+		op = pathItem.PATCH
 	case http.MethodDelete:
-		if pathItem.DELETE == nil {
-			return nil, fmt.Errorf("method %s not defined for path", method)
-		}
-		return pathItem.DELETE, nil
+		op = pathItem.DELETE
 	case http.MethodHead:
-		if pathItem.HEAD == nil {
-			return nil, fmt.Errorf("method %s not defined for path", method)
-		}
-		return pathItem.HEAD, nil
+		op = pathItem.HEAD
 	case http.MethodOptions:
-		if pathItem.OPTIONS == nil {
-			return nil, fmt.Errorf("method %s not defined for path", method)
-		}
-		return pathItem.OPTIONS, nil
+		op = pathItem.OPTIONS
 	default:
-		return nil, fmt.Errorf("unsupported method %s", method)
+		return nil, &Finding{
+			Source:   ApiContract,
+			Stage:    RequestStage,
+			Severity: SeverityError,
+			Code:     CodeMethodNotDefined,
+			Message:  fmt.Sprintf("unsupported method %s", method),
+		}
 	}
+
+	if op == nil {
+		return nil, &Finding{
+			Source:   ApiContract,
+			Stage:    RequestStage,
+			Severity: SeverityError,
+			Code:     CodeMethodNotDefined,
+			Message:  fmt.Sprintf("method %s not defined for path", method),
+		}
+	}
+
+	return op, nil
 }
 
-func fetchRequestBodySchema(contentType string, op *OpenApiOperation) (string, OpenApiSchemaRef, error) {
-	if op == nil {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("operation is nil")
-	}
-
-	if op.RequestBody == nil {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("request body is not defined in contract")
-	}
-
+func fetchRequestBodySchema(contentType string, op *OpenApiOperation) (string, OpenApiSchemaRef, *Finding) {
 	// Content type normalization
 	ct := strings.Split(contentType, ";")[0]
 	ct = strings.ToLower(strings.TrimSpace(ct))
 
 	mt, ok := op.RequestBody.Content[ct]
 	if !ok {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("content type not supported: %s", ct)
+		return "", OpenApiSchemaRef{}, &Finding{
+			Source:   ApiContract,
+			Stage:    RequestStage,
+			Severity: SeverityError,
+			Code:     CodeRequestContentTypeUnsupported,
+			Message:  fmt.Sprintf("content type not supported: %s", ct),
+		}
 	}
 
 	if mt.Schema == nil {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("no schema defined for content type: %s", ct)
+		return "", OpenApiSchemaRef{}, &Finding{
+			Source:   ApiContract,
+			Stage:    RequestStage,
+			Severity: SeverityError,
+			Code:     CodeRequestSchemaMissing,
+			Message:  fmt.Sprintf("no schema defined for content type: %s", ct),
+		}
 	}
 
 	// Return the schema reference
@@ -121,21 +127,30 @@ func fetchRequestBodySchema(contentType string, op *OpenApiOperation) (string, O
 	return "", *mt.Schema, nil
 }
 
-func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, OpenApiSchemaRef, error) {
-	if res == nil {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("response is nil")
-	}
+func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, OpenApiSchemaRef, *Finding) {
 	// Content type normalization
 	ct := strings.Split(contentType, ";")[0]
 	ct = strings.ToLower(strings.TrimSpace(ct))
 
 	mt, ok := res.Content[ct]
 	if !ok {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("content type not supported: %s", ct)
+		return "", OpenApiSchemaRef{}, &Finding{
+			Source:   ApiContract,
+			Stage:    ResponseStage,
+			Severity: SeverityError,
+			Code:     CodeResponseContentTypeUnsupported,
+			Message:  fmt.Sprintf("content type not supported: %s", ct),
+		}
 	}
 
 	if mt.Schema == nil {
-		return "", OpenApiSchemaRef{}, fmt.Errorf("no schema defined for content type: %s", ct)
+		return "", OpenApiSchemaRef{}, &Finding{
+			Source:   ApiContract,
+			Stage:    ResponseStage,
+			Severity: SeverityError,
+			Code:     CodeResponseSchemaMissing,
+			Message:  fmt.Sprintf("no schema defined for content type: %s", ct),
+		}
 	}
 
 	// Return the schema reference
@@ -160,39 +175,120 @@ func fetchResponseBodySchema(contentType string, res *OpenApiResponse) (string, 
 //   - Detect unknown/extra fields not defined in schema
 //   - Improve error reporting with full JSON path (e.g., "items[0].email")
 //   - Support nullable and optional fields properly
-func compareBody(schema OpenApiSchemaRef, value any) []error {
-	var findings []error
+func compareBody(schema OpenApiSchemaRef, value any, stage FindingStage, req *http.Request, res *http.Response) []Finding {
+	var findings []Finding
 
 	switch schema.Type {
 	case "object":
 		obj, ok := value.(map[string]any)
 		if !ok {
-			return []error{fmt.Errorf("expected object")}
+			return []Finding{
+				{
+					Source:   ApiContract,
+					Stage:    stage,
+					Severity: SeverityError,
+					Code:     codeForTypeMismatch(stage),
+					Message:  "expected object",
+					Metadata: bodyFindingMetadata(stage, req, res, ""),
+				},
+			}
 		}
 
 		for _, field := range schema.Required {
 			if _, ok := obj[field]; !ok {
-				findings = append(findings, fmt.Errorf("missing required field: %s", field))
+				findings = append(findings, Finding{
+					Source:   ApiContract,
+					Stage:    stage,
+					Severity: SeverityError,
+					Code:     codeForRequiredFieldMissing(stage),
+					Message:  fmt.Sprintf("missing required field: %s", field),
+					Metadata: bodyFindingMetadata(stage, req, res, field),
+				})
 			}
 		}
 
 	case "array":
 		arr, ok := value.([]any)
 		if !ok {
-			return []error{fmt.Errorf("expected array")}
+			return []Finding{
+				{
+					Source:   ApiContract,
+					Stage:    stage,
+					Severity: SeverityError,
+					Code:     codeForTypeMismatch(stage),
+					Message:  "expected array",
+					Metadata: bodyFindingMetadata(stage, req, res, ""),
+				},
+			}
 		}
 
 		if schema.Items == nil {
-			return []error{fmt.Errorf("array schema missing items definition")}
+			return []Finding{
+				{
+					Source:   ApiContract,
+					Stage:    stage,
+					Severity: SeverityError,
+					Code:     CodeArrayItemsSchemaMissing,
+					Message:  "array schema missing items definition",
+					Metadata: bodyFindingMetadata(stage, req, res, ""),
+				},
+			}
 		}
 
 		for i, item := range arr {
-			itemFindings := compareBody(*schema.Items, item)
-			for _, err := range itemFindings {
-				findings = append(findings, fmt.Errorf("array index %d: %w", i, err))
+			itemFindings := compareBody(*schema.Items, item, stage, req, res)
+			for _, f := range itemFindings {
+				f.Message = fmt.Sprintf("array index %d: %s", i, f.Message)
+				findings = append(findings, f)
 			}
 		}
 	}
 
 	return findings
+}
+
+func bodyFindingMetadata(stage FindingStage, req *http.Request, res *http.Response, field string) *FindingMetadata {
+	md := &FindingMetadata{
+		Field: field,
+	}
+
+	if stage == RequestStage && req != nil {
+		md.RequestID = utils.GetOrCreateRequestID(req)
+		md.Host = req.Host
+		md.Path = req.URL.Path
+		md.Method = HttpMethod(req.Method)
+		return md
+	}
+
+	if stage == ResponseStage && res != nil && res.Request != nil {
+		md.RequestID = utils.GetOrCreateRequestID(res.Request)
+		md.Host = res.Request.Host
+		md.Path = res.Request.URL.Path
+		md.Method = HttpMethod(res.Request.Method)
+		return md
+	}
+
+	return md
+}
+
+func codeForRequiredFieldMissing(stage FindingStage) FindingCode {
+	switch stage {
+	case ResponseStage:
+		return CodeResponseRequiredFieldMissing
+	case RequestStage:
+		return CodeRequestRequiredFieldMissing
+	default:
+		return CodeRequestRequiredFieldMissing
+	}
+}
+
+func codeForTypeMismatch(stage FindingStage) FindingCode {
+	switch stage {
+	case ResponseStage:
+		return CodeResponseTypeMismatch
+	case RequestStage:
+		return CodeRequestTypeMismatch
+	default:
+		return CodeRequestTypeMismatch
+	}
 }
