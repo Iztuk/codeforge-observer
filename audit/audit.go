@@ -65,9 +65,11 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApi
 	//   - Spool large bodies to disk instead of memory
 	//   - Make max size configurable per service
 	var bodyBytes []byte
-	var err error
 	if r.Body != nil {
-		bodyBytes, err = io.ReadAll(r.Body)
+		origBody := r.Body
+		var err error
+		bodyBytes, err = io.ReadAll(origBody)
+
 		if err != nil {
 			findings = append(findings, Finding{
 				Source:   ApiContract,
@@ -79,7 +81,9 @@ func AuditRequest(r *http.Request, contractsDoc OpenApiDoc) ([]Finding, *OpenApi
 			})
 			return findings, op
 		}
-		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+		_ = origBody.Close()
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
 	if len(bodyBytes) == 0 {
@@ -212,8 +216,10 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 	//   - Make max size configurable per service
 	var bodyBytes []byte
 	if r.Body != nil {
+		origBody := r.Body
 		var err error
-		bodyBytes, err = io.ReadAll(r.Body)
+		bodyBytes, err = io.ReadAll(origBody)
+
 		if err != nil {
 			findings = append(findings, Finding{
 				Source:   ApiContract,
@@ -225,7 +231,9 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 			})
 			return findings
 		}
-		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+		_ = origBody.Close()
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
 	if len(bodyBytes) == 0 && len(res.Content) > 0 {
