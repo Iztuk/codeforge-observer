@@ -220,7 +220,7 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 				Stage:    ResponseStage,
 				Severity: SeverityError,
 				Code:     CodeResponseBodyReadFailed,
-				Message:  fmt.Sprintf("error reading request body: %v", err),
+				Message:  fmt.Sprintf("error reading response body: %v", err),
 				Metadata: responseFindingMetadata(r),
 			})
 			return findings
@@ -298,7 +298,7 @@ func AuditResponse(r *http.Response, op *OpenApiOperation, components *OpenApiCo
 			Stage:    ResponseStage,
 			Severity: SeverityError,
 			Code:     CodeResponseBodyInvalidJSON,
-			Message:  fmt.Sprintf("failed to unmarshall JSON: %v", err),
+			Message:  fmt.Sprintf("failed to unmarshal JSON: %v", err),
 			Metadata: responseFindingMetadata(r),
 		})
 		return findings
