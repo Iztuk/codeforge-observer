@@ -27,6 +27,7 @@ type ProxyTarget struct {
 	Proxy     *httputil.ReverseProxy
 	Logger    *log.Logger
 	Contracts *audit.OpenApiDoc
+	Resource  *audit.ResourceDoc
 }
 
 type contextKey string
@@ -34,7 +35,7 @@ type contextKey string
 const observationKey contextKey = "observation"
 const operationKey contextKey = "operation"
 
-func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audit.OpenApiDoc) (*ProxyTarget, error) {
+func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audit.OpenApiDoc, resources audit.ResourceDoc) (*ProxyTarget, error) {
 	targetUrl, err := url.Parse(target)
 	if err != nil {
 		return nil, err
@@ -48,6 +49,7 @@ func NewProxyHandler(target, hostName string, logger *log.Logger, contracts audi
 		Proxy:     rp,
 		Logger:    logger,
 		Contracts: &contracts,
+		Resource:  &resources,
 	}
 
 	originalDirector := rp.Director

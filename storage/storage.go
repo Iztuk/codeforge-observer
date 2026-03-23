@@ -48,8 +48,7 @@ func observerDbPath() (string, error) {
 func initSchema(db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS hosts (
-		id TEXT PRIMARY KEY,
-		name TEXT UNIQUE,
+		name TEXT PRIMARY KEY,
 		upstream TEXT NOT NULL UNIQUE,
 		api_contract_file TEXT,
 		resource_contract_file TEXT,

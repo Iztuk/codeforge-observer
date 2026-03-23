@@ -103,6 +103,10 @@ const (
 func ReadOpenApiDoc(docPath string) (OpenApiDoc, error) {
 	var doc OpenApiDoc
 
+	if docPath == "" {
+		return OpenApiDoc{}, nil
+	}
+
 	d, err := os.ReadFile(docPath)
 	if err != nil {
 		return OpenApiDoc{}, err

@@ -6,6 +6,7 @@ import (
 	"codeforge-observer/proxy"
 	"codeforge-observer/storage"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,8 @@ import (
 	"syscall"
 	"time"
 )
+
+var db *sql.DB
 
 func RunDaemon() error {
 	f, err := os.OpenFile(config.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -63,7 +66,7 @@ func RunDaemon() error {
 	go acceptControlConnections(controlLn, pm)
 
 	// Load the observer persistence layer
-	_, err = storage.LoadObserverStorage()
+	db, err = storage.LoadObserverStorage()
 	if err != nil {
 		fmt.Printf("Failed to start daemon: %v\n", err)
 		logger.Fatalf("server failed: %v", err)
@@ -164,7 +167,8 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 
 	switch cmd.Action {
 	case "add_host":
-		contract, err := audit.ReadOpenApiDoc(cmd.Contract)
+		apiContract, err := audit.ReadOpenApiDoc(cmd.Contract)
+		resourceContract, err := audit.ReadResourceDoc(cmd.Resource)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
 				OK:    false,
@@ -173,7 +177,22 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 			return
 		}
 
-		target, err := proxy.NewProxyHandler(cmd.Upstream, cmd.Host, pm.Logger, contract)
+		target, err := proxy.NewProxyHandler(cmd.Upstream, cmd.Host, pm.Logger, apiContract, resourceContract)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+				OK:    false,
+				Error: err.Error(),
+			})
+			return
+		}
+
+		var host = storage.HostInfo{
+			Name:     cmd.Host,
+			Upstream: cmd.Upstream,
+			Contract: cmd.Contract,
+			Resource: cmd.Resource,
+		}
+		err = storage.CreateHost(host, db)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
 				OK:    false,
