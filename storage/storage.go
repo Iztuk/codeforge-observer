@@ -24,6 +24,10 @@ func LoadObserverStorage() (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	if err := initSchema(db); err != nil {
+		return nil, err
+	}
+
 	return db, nil
 }
 
@@ -41,4 +45,39 @@ func observerDbPath() (string, error) {
 	return filepath.Join(appDir, "cf-observer.db"), nil
 }
 
-// TODO: Create the tables for the SQLite database (Hosts and Findings)
+func initSchema(db *sql.DB) error {
+	query := `
+	CREATE TABLE IF NOT EXISTS hosts (
+		id TEXT PRIMARY KEY,
+		name TEXT UNIQUE,
+		upstream TEXT NOT NULL UNIQUE,
+		api_contract_file TEXT,
+		resource_contract_file TEXT,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS findings (
+		id TEXT PRIMARY KEY,
+		source TEXT NOT NULL,
+		stage TEXT NOT NULL,
+		severity TEXT NOT NULL,
+		code TEXT NOT NULL,
+		message TEXT NOT NULL,
+		request_id TEXT,
+		host TEXT,
+		path TEXT,
+		method TEXT,
+		body TEXT,
+		operation_id TEXT,
+		field TEXT,
+		resource TEXT
+	);
+	`
+
+	if _, err := db.Exec(query); err != nil {
+		return fmt.Errorf("failed to initialize schema: %w", err)
+	}
+
+	return nil
+}
