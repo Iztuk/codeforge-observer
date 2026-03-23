@@ -4,6 +4,7 @@ import (
 	"codeforge-observer/audit"
 	"codeforge-observer/config"
 	"codeforge-observer/proxy"
+	"codeforge-observer/storage"
 	"context"
 	"encoding/json"
 	"errors"
@@ -60,6 +61,13 @@ func RunDaemon() error {
 	}()
 
 	go acceptControlConnections(controlLn, pm)
+
+	// Load the observer persistence layer
+	_, err = storage.LoadObserverStorage()
+	if err != nil {
+		fmt.Printf("Failed to start daemon: %v\n", err)
+		logger.Fatalf("server failed: %v", err)
+	}
 
 	server := &http.Server{
 		Addr:    config.ListenAddr,
