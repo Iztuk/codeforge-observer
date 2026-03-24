@@ -19,7 +19,7 @@ func makeTestResponseRequest(t *testing.T, method, path string) *http.Request {
 }
 
 func TestAuditResponse(t *testing.T) {
-	doc := testContract()
+	doc := TestContract()
 
 	tests := []struct {
 		name                 string

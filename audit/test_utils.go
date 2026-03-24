@@ -1,6 +1,6 @@
 package audit
 
-func testContract() OpenApiDoc {
+func TestContract() OpenApiDoc {
 	return OpenApiDoc{
 		OpenAPI: "3.0.3",
 		Info: OpenApiInfo{
