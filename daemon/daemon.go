@@ -44,9 +44,20 @@ func RunDaemon() error {
 
 	logger.Printf("daemon started with pid=%d", pid)
 
+	// Load the observer persistence layer
+	db, err = storage.LoadObserverStorage()
+	if err != nil {
+		logger.Fatalf("server failed: %v", err)
+	}
+
+	logger.Print("")
 	pm := &proxy.ProxyManager{
 		Hosts:  make(map[string]*proxy.ProxyTarget),
 		Logger: logger,
+	}
+	err = pm.BootstrapHosts(db)
+	if err != nil {
+		logger.Fatalf("bootstrapping failed: %v", err)
 	}
 
 	// Remove stale socket file before binding
@@ -64,13 +75,6 @@ func RunDaemon() error {
 	}()
 
 	go acceptControlConnections(controlLn, pm)
-
-	// Load the observer persistence layer
-	db, err = storage.LoadObserverStorage()
-	if err != nil {
-		fmt.Printf("Failed to start daemon: %v\n", err)
-		logger.Fatalf("server failed: %v", err)
-	}
 
 	server := &http.Server{
 		Addr:    config.ListenAddr,

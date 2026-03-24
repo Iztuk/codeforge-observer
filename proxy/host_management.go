@@ -1,11 +1,14 @@
 package proxy
 
 import (
+	"codeforge-observer/audit"
 	"codeforge-observer/config"
 	"codeforge-observer/storage"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 )
 
@@ -147,4 +150,40 @@ func (pm *ProxyManager) ListHosts() []storage.HostInfo {
 	}
 
 	return hosts
+}
+
+func (pm *ProxyManager) BootstrapHosts(db *sql.DB) error {
+	hosts, err := storage.ReadHosts(db)
+	if err != nil {
+		return err
+	}
+
+	for _, host := range hosts {
+		var target ProxyTarget = ProxyTarget{
+			Name:   host.Name,
+			Logger: pm.Logger,
+		}
+
+		u, err := url.Parse(host.Upstream)
+		if err != nil {
+			return err
+		}
+		target.Upstream = u
+
+		apiDoc, err := audit.ReadOpenApiDoc(host.Contract)
+		if err != nil {
+			return err
+		}
+		target.Contracts = &apiDoc
+
+		resourceDoc, err := audit.ReadResourceDoc(host.Resource)
+		if err != nil {
+			return err
+		}
+		target.Resource = &resourceDoc
+
+		pm.AddHost(host.Name, &target)
+	}
+
+	return nil
 }

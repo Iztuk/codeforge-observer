@@ -25,9 +25,10 @@ type ProxyTarget struct {
 	Name      string
 	Upstream  *url.URL
 	Proxy     *httputil.ReverseProxy
-	Logger    *log.Logger
 	Contracts *audit.OpenApiDoc
 	Resource  *audit.ResourceDoc
+
+	Logger *log.Logger
 }
 
 type contextKey string

@@ -41,7 +41,7 @@ func ReadHosts(db *sql.DB) ([]HostInfo, error) {
 	for rows.Next() {
 		var host HostInfo
 
-		err := rows.Scan(&host.Name, &host.Upstream, &host.Contract, host.Resource)
+		err := rows.Scan(&host.Name, &host.Upstream, &host.Contract, &host.Resource)
 		if err != nil {
 			return nil, err
 		}
