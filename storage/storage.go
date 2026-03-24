@@ -9,26 +9,28 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func LoadObserverStorage() (*sql.DB, error) {
+var DB *sql.DB
+
+func LoadObserverStorage() error {
 	dbPath, err := observerDbPath()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	db, err := sql.Open("sqlite3", dbPath)
+	DB, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open databse: %w", err)
+		return fmt.Errorf("failed to open databse: %w", err)
 	}
 
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	if err := DB.Ping(); err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	if err := initSchema(db); err != nil {
-		return nil, err
+	if err := initSchema(DB); err != nil {
+		return err
 	}
 
-	return db, nil
+	return nil
 }
 
 func observerDbPath() (string, error) {

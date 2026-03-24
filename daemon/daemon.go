@@ -6,7 +6,6 @@ import (
 	"codeforge-observer/proxy"
 	"codeforge-observer/storage"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,8 +19,6 @@ import (
 	"syscall"
 	"time"
 )
-
-var db *sql.DB
 
 func RunDaemon() error {
 	f, err := os.OpenFile(config.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -45,7 +42,7 @@ func RunDaemon() error {
 	logger.Printf("daemon started with pid=%d", pid)
 
 	// Load the observer persistence layer
-	db, err = storage.LoadObserverStorage()
+	err = storage.LoadObserverStorage()
 	if err != nil {
 		logger.Fatalf("server failed: %v", err)
 	}
@@ -55,7 +52,7 @@ func RunDaemon() error {
 		Hosts:  make(map[string]*proxy.ProxyTarget),
 		Logger: logger,
 	}
-	err = pm.BootstrapHosts(db)
+	err = pm.BootstrapHosts(storage.DB)
 	if err != nil {
 		logger.Fatalf("bootstrapping failed: %v", err)
 	}
@@ -196,7 +193,7 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 			Contract: cmd.Contract,
 			Resource: cmd.Resource,
 		}
-		err = storage.CreateHost(host, db)
+		err = storage.CreateHost(host, storage.DB)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
 				OK:    false,

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http/httputil"
 	"net/url"
 	"strings"
 )
@@ -169,6 +170,7 @@ func (pm *ProxyManager) BootstrapHosts(db *sql.DB) error {
 			return err
 		}
 		target.Upstream = u
+		target.Proxy = httputil.NewSingleHostReverseProxy(u)
 
 		apiDoc, err := audit.ReadOpenApiDoc(host.Contract)
 		if err != nil {
