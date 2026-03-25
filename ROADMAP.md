@@ -2,12 +2,13 @@
 
 ## Persistence
 
-Right now host config is in memory only
+Right now host config and findings are in memory only
 
-**Goals**
+**Goal**
 
 - survive daemon restarts
 - make dynamic host management durable
+- ensure findings are saved to the database
 
 **Implementation**
 
@@ -15,9 +16,16 @@ Right now host config is in memory only
 
 **Done Signal**
 
+Hosts
+
 - Add host
 - Restart daemon
 - Host is still present
+
+Findings
+
+- Record a finding
+- Ensure finding is written to the database
 
 ## Resource Validation Layer
 

@@ -25,6 +25,7 @@ func main() {
 	hostName := hostCmd.String("name", "", "set the host name")
 	upstream := hostCmd.String("upstream", "", "host's upstream URL")
 	contractFile := hostCmd.String("contract", "", "API contract file")
+	resourceFile := hostCmd.String("resource", "", "Resource contract file")
 
 	cmdArg := os.Args[1]
 	switch cmdArg {
@@ -48,7 +49,7 @@ func main() {
 				log.Fatal("host add requires -name and -upstream")
 			}
 
-			if err := proxy.AddHostCommand(*hostName, *upstream, *contractFile); err != nil {
+			if err := proxy.AddHostCommand(*hostName, *upstream, *contractFile, *resourceFile); err != nil {
 				log.Fatal(err)
 			}
 		case "remove":

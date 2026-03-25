@@ -4,6 +4,7 @@ import (
 	"codeforge-observer/audit"
 	"codeforge-observer/config"
 	"codeforge-observer/proxy"
+	"codeforge-observer/storage"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,9 +41,20 @@ func RunDaemon() error {
 
 	logger.Printf("daemon started with pid=%d", pid)
 
+	// Load the observer persistence layer
+	err = storage.LoadObserverStorage()
+	if err != nil {
+		logger.Fatalf("server failed: %v", err)
+	}
+
+	logger.Print("")
 	pm := &proxy.ProxyManager{
 		Hosts:  make(map[string]*proxy.ProxyTarget),
 		Logger: logger,
+	}
+	err = pm.BootstrapHosts(storage.DB)
+	if err != nil {
+		logger.Fatalf("bootstrapping failed: %v", err)
 	}
 
 	// Remove stale socket file before binding
@@ -156,7 +168,7 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 
 	switch cmd.Action {
 	case "add_host":
-		contract, err := audit.ReadOpenApiDoc(cmd.Contract)
+		apiContract, err := audit.ReadOpenApiDoc(cmd.Contract)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
 				OK:    false,
@@ -165,7 +177,31 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 			return
 		}
 
-		target, err := proxy.NewProxyHandler(cmd.Upstream, cmd.Host, pm.Logger, contract)
+		resourceContract, err := audit.ReadResourceDoc(cmd.Resource)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+				OK:    false,
+				Error: err.Error(),
+			})
+			return
+		}
+
+		target, err := proxy.NewProxyHandler(cmd.Upstream, cmd.Host, pm.Logger, apiContract, resourceContract)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+				OK:    false,
+				Error: err.Error(),
+			})
+			return
+		}
+
+		var host = storage.HostInfo{
+			Name:     cmd.Host,
+			Upstream: cmd.Upstream,
+			Contract: cmd.Contract,
+			Resource: cmd.Resource,
+		}
+		err = storage.CreateHost(host, storage.DB)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
 				OK:    false,

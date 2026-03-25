@@ -76,7 +76,7 @@ func TestAuditRequest(t *testing.T) {
 		},
 	}
 
-	doc := testContract()
+	doc := TestContract()
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,7 +1,10 @@
 package proxy
 
 import (
+	"codeforge-observer/audit"
 	"codeforge-observer/config"
+	"codeforge-observer/storage"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -13,22 +16,17 @@ type ControlCommand struct {
 	Host     string `json:"host,omitempty"`
 	Upstream string `json:"upstream,omitempty"`
 	Contract string `json:"contract,omitempty"`
+	Resource string `json:"resource,omitempty"`
 }
 
 type ControlResponse struct {
-	OK      bool       `json:"ok"`
-	Message string     `json:"message,omitempty"`
-	Error   string     `json:"error,omitempty"`
-	Hosts   []HostInfo `json:"hosts,omitempty"`
+	OK      bool               `json:"ok"`
+	Message string             `json:"message,omitempty"`
+	Error   string             `json:"error,omitempty"`
+	Hosts   []storage.HostInfo `json:"hosts,omitempty"`
 }
 
-type HostInfo struct {
-	Name     string `json:"name"`
-	Upstream string `json:"upstream"`
-	// Contract string `json:"contract"`
-}
-
-func AddHostCommand(host, upstream, contractFile string) error {
+func AddHostCommand(host, upstream, contractFile, resourceFile string) error {
 	conn, err := net.Dial("unix", config.SockFile)
 	if err != nil {
 		return fmt.Errorf("failed to connect to daemon: %w", err)
@@ -40,6 +38,7 @@ func AddHostCommand(host, upstream, contractFile string) error {
 		Host:     host,
 		Upstream: upstream,
 		Contract: contractFile,
+		Resource: resourceFile,
 	}
 
 	if err := json.NewEncoder(conn).Encode(cmd); err != nil {
@@ -138,16 +137,44 @@ func (pm *ProxyManager) RemoveHost(host string) {
 	delete(pm.Hosts, host)
 }
 
-func (pm *ProxyManager) ListHosts() []HostInfo {
+func (pm *ProxyManager) ListHosts() []storage.HostInfo {
 	pm.Mu.RLock()
 	defer pm.Mu.RUnlock()
-	hosts := make([]HostInfo, 0, len(pm.Hosts))
+	hosts := make([]storage.HostInfo, 0, len(pm.Hosts))
 	for _, host := range pm.Hosts {
-		hosts = append(hosts, HostInfo{
+		hosts = append(hosts, storage.HostInfo{
 			Name:     host.Name,
 			Upstream: host.Upstream.String(),
 		})
 	}
 
 	return hosts
+}
+
+func (pm *ProxyManager) BootstrapHosts(db *sql.DB) error {
+	hosts, err := storage.ReadHosts(db)
+	if err != nil {
+		return err
+	}
+
+	for _, host := range hosts {
+		apiDoc, err := audit.ReadOpenApiDoc(host.Contract)
+		if err != nil {
+			return err
+		}
+
+		resourceDoc, err := audit.ReadResourceDoc(host.Resource)
+		if err != nil {
+			return err
+		}
+
+		target, err := NewProxyHandler(host.Upstream, host.Name, pm.Logger, apiDoc, resourceDoc)
+		if err != nil {
+			return err
+		}
+
+		pm.AddHost(host.Name, target)
+	}
+
+	return nil
 }
