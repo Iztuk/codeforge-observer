@@ -3,11 +3,16 @@ package storage
 import (
 	"codeforge-observer/audit"
 	"database/sql"
+	"fmt"
 
 	"github.com/google/uuid"
 )
 
 func InsertFindings(findings []audit.Finding, db *sql.DB) error {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		return err
