@@ -17,18 +17,22 @@ func LoadObserverStorage() error {
 		return err
 	}
 
-	DB, err = sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open databse: %w", err)
 	}
 
-	if err := DB.Ping(); err != nil {
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	if err := initSchema(DB); err != nil {
+	if err := initSchema(db); err != nil {
+		_ = db.Close()
 		return err
 	}
+
+	DB = db
 
 	return nil
 }
