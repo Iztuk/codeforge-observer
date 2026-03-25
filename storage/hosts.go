@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -18,6 +19,10 @@ func CreateHost(host HostInfo, db *sql.DB) error {
 	query := `
 	INSERT INTO hosts (name, upstream, api_contract_file, resource_contract_file, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
 	`
+
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 
 	_, err := db.Exec(query, host.Name, host.Upstream, host.Contract, host.Resource, now, now)
 	if err != nil {
