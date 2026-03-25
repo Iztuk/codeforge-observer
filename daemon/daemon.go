@@ -169,6 +169,14 @@ func handleControlConn(conn net.Conn, pm *proxy.ProxyManager) {
 	switch cmd.Action {
 	case "add_host":
 		apiContract, err := audit.ReadOpenApiDoc(cmd.Contract)
+		if err != nil {
+			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
+				OK:    false,
+				Error: err.Error(),
+			})
+			return
+		}
+
 		resourceContract, err := audit.ReadResourceDoc(cmd.Resource)
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(proxy.ControlResponse{
