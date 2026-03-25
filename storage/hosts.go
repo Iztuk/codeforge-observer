@@ -37,6 +37,10 @@ func ReadHosts(db *sql.DB) ([]HostInfo, error) {
 
 	query := `SELECT name, upstream, api_contract_file, resource_contract_file FROM hosts`
 
+	if db == nil {
+		return nil, fmt.Errorf("database connection is nil")
+	}
+
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
@@ -68,6 +72,9 @@ func UpdateHost(host HostInfo, db *sql.DB) error {
 	WHERE name = ?
 	SET name = ?, upstream = ?, api_contract_file = ?, resource_contract_file = ?, updated_at = ?
 	`
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 
 	_, err := db.Exec(query, host.Name, host.Upstream, host.Contract, host.Resource, now)
 	if err != nil {
@@ -81,6 +88,10 @@ func DeleteHost(hostName string, db *sql.DB) error {
 	query := `
 	DELETE FROM hosts WHERE name = ?
 	`
+
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 
 	_, err := db.Exec(query, hostName)
 	if err != nil {
