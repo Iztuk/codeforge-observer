@@ -10,8 +10,8 @@ type ResourceDoc struct {
 }
 
 type Resource struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name string       `json:"name"`
+	Type ResourceType `json:"type"`
 
 	DB *DB `json:"database,omitzero"`
 }
@@ -24,7 +24,6 @@ const (
 
 type DB struct {
 	Dialect string             `json:"dialect"`
-	Addr    string             `json:"addr"`
 	Tables  map[string]DBTable `json:"tables"`
 }
 
@@ -41,8 +40,9 @@ type FieldSpec struct {
 	Nullable   bool    `json:"nullable"`
 	Default    *string `json:"default,omitzero"`
 
-	Read  bool `json:"read"`
-	Write bool `json:"write"`
+	Read    bool `json:"read"`
+	Write   bool `json:"write"`
+	Mutable bool `json:"mutable"`
 }
 
 func ReadResourceDoc(docPath string) (ResourceDoc, error) {

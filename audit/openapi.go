@@ -76,17 +76,16 @@ type OpenApiSchemaRef struct {
 	Required   []string                    `json:"required,omitempty"`
 	Items      *OpenApiSchemaRef           `json:"items,omitempty"`
 
-	Enum      []string `json:"enum,omitempty"`
-	Format    string   `json:"format,omitempty"`
-	Nullable  bool     `json:"nullable,omitempty"`
-	MinLength *int     `json:"minLength,omitempty"`
-	MaxLength *int     `json:"maxLength,omitempty"`
+	Enum      []json.RawMessage `json:"enum,omitempty"`
+	Format    string            `json:"format,omitempty"`
+	Nullable  bool              `json:"nullable,omitempty"`
+	MinLength *int              `json:"minLength,omitempty"`
+	MaxLength *int              `json:"maxLength,omitempty"`
 }
 
 type RouteResourceBinding struct {
-	Table     string     `json:"table"` // e.g. "tableName"
-	Identity  []string   `json:"identity,omitempty"`
-	Operation ResourceOp `json:"operation,omitempty"` // "readOne" | "readMany" | "create" | "update" | "partialUpdate" | "delete"
+	ResourceName string `json:"resource_name"`
+	Table        string `json:"table"` // e.g. "tableName"
 }
 
 type ResourceOp string
