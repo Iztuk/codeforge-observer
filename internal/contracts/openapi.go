@@ -1,4 +1,4 @@
-package audit
+package contracts
 
 import (
 	"encoding/json"
